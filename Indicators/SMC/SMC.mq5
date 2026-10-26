@@ -88,6 +88,7 @@ input bool FairValueGapAutoThreshold = false;
 input color BullishFVGColor = C'0,255,104';
 input color BearishFVGColor = C'255,0,8';
 input int FairValueGapExtend = 1;
+input int MaxFairValueGapsToShow = 5;
 
 input group "Previous Period Highs & Lows"
 input bool ShowDailyLevels = false;
@@ -304,13 +305,44 @@ void DrawActiveFairValueGaps(const MqlRates &bars[])
 {
    if(!RuntimeShowFairValueGaps || ArraySize(bars)==0)
       return;
+   int gapCount=ArraySize(FairValueGaps);
+   bool selected[];
+   if(ArrayResize(selected,gapCount)!=gapCount)
+   {
+      PrintFormat("SMC: unable to allocate FVG display selection (error=%d).",
+                  GetLastError());
+      return;
+   }
+   for(int i=0;i<gapCount;i++)
+      selected[i]=false;
+
+   int displayCount=MathMin(MaxFairValueGapsToShow,gapCount);
+   for(int rank=0;rank<displayCount;rank++)
+   {
+      int newest=-1;
+      for(int i=0;i<gapCount;i++)
+      {
+         if(selected[i])
+            continue;
+         if(newest<0 || FairValueGaps[i].time>FairValueGaps[newest].time)
+            newest=i;
+      }
+      if(newest>=0)
+         selected[newest]=true;
+   }
+
    int periodSeconds=PeriodSeconds(_Period);
    if(periodSeconds<=0)
       periodSeconds=60;
    datetime right=bars[0].time+FairValueGapExtend*periodSeconds;
-   for(int i=0;i<ArraySize(FairValueGaps);i++)
+   for(int i=0;i<gapCount;i++)
    {
       FairValueGapState gap=FairValueGaps[i];
+      if(!selected[i])
+      {
+         DeleteFairValueGap(DrawConfig,gap);
+         continue;
+      }
       gap.right=right;
       color gapColor=(gap.bias>0 ? BullishFVGColor : BearishFVGColor);
       DrawFairValueGap(DrawConfig,gap,SMC_DrawWithAlpha(gapColor,77));
@@ -488,7 +520,8 @@ int OnInit()
       InternalOrderBlocksToShow<1 || InternalOrderBlocksToShow>20 ||
       SwingOrderBlocksToShow<1 || SwingOrderBlocksToShow>20 ||
       OrderBlockExtend<1 || OrderBlockExtend>1000 ||
-      FairValueGapExtend<0 || EqualHighLowThreshold<0.0 ||
+      FairValueGapExtend<0 || MaxFairValueGapsToShow<1 ||
+      MaxFairValueGapsToShow>100 || EqualHighLowThreshold<0.0 ||
       EqualHighLowThreshold>0.5)
       return INIT_PARAMETERS_INCORRECT;
    RuntimeShowInternalStructure=ShowInternalStructure;
@@ -864,7 +897,11 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,
                       group==SMC_PANEL_PREVIOUS_LEVELS ? PanelState.previousLevels :
                       PanelState.strongWeak);
    if(groupEnabled)
+   {
+      if(group==SMC_PANEL_ORDER_BLOCKS)
+         DeleteObjectsWithPrefix(ObjectPrefix+"OB_");
       LastProcessedBar=0;
+   }
    else
       HidePanelGroupObjects(group);
    ChartRedraw(0);
