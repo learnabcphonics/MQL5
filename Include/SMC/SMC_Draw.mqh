@@ -79,6 +79,7 @@ void DrawText(const string name,const datetime when,const double price,
    ObjectSetInteger(0,name,OBJPROP_ANCHOR,anchor);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+   ObjectSetString(0,name,OBJPROP_TOOLTIP,"\n");
 }
 
 string BiasText(const int bias)
@@ -236,6 +237,7 @@ void DrawZoneBox(const string name,const datetime startTime,const datetime endTi
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_SELECTED,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+   ObjectSetString(0,name,OBJPROP_TOOLTIP,"\n");
 }
 
 void DrawEqualLevelEvent(const SMC_DrawConfig &config,
@@ -315,11 +317,63 @@ string SMC_OrderBlockObjectName(const SMC_DrawConfig &config,
           IntegerToString(block.bias);
 }
 
+bool SMC_FindOrderBlockLabelPosition(const datetime baseTime,
+                                     const double basePrice,
+                                     const string label,
+                                     const int &occupiedX[],
+                                     const int &occupiedY[],
+                                     const int &occupiedHalfWidths[],
+                                     const int occupiedCount,
+                                     datetime &labelTime,double &labelPrice,
+                                     int &labelX,int &labelY,int &labelHalfWidth)
+{
+   int baseX=0,baseY=0;
+   if(!ChartTimePriceToXY(0,0,baseTime,basePrice,baseX,baseY))
+      return false;
+
+   labelHalfWidth=StringLen(label)*3+2;
+   int labelHalfHeight=7;
+   for(int attempt=0;attempt<81;attempt++)
+   {
+      int offset=0;
+      if(attempt>0)
+      {
+         int distance=((attempt+1)/2)*14;
+         offset=(attempt%2==1 ? distance : -distance);
+      }
+      int candidateY=baseY+offset;
+      bool overlaps=false;
+      for(int i=0;i<occupiedCount;i++)
+      {
+         bool overlapsHorizontally=
+            MathAbs(baseX-occupiedX[i])<labelHalfWidth+occupiedHalfWidths[i];
+         bool overlapsVertically=MathAbs(candidateY-occupiedY[i])<labelHalfHeight*2;
+         if(overlapsHorizontally && overlapsVertically)
+         {
+            overlaps=true;
+            break;
+         }
+      }
+      if(overlaps)
+         continue;
+
+      int subWindow=0;
+      if(!ChartXYToTimePrice(0,baseX,candidateY,subWindow,labelTime,labelPrice))
+         continue;
+      labelX=baseX;
+      labelY=candidateY;
+      return true;
+   }
+   return false;
+}
+
 void DrawOrderBlockObjects(const SMC_DrawConfig &config,
                            const OrderBlockState &orderBlocks[],
                            const datetime lastTime,const int periodSeconds)
 {
    int internalCount=0,swingCount=0;
+   int labelX[40],labelY[40],labelHalfWidths[40];
+   int placedLabelCount=0;
    int count=ArraySize(orderBlocks);
    for(int i=count-1;i>=0;i--)
    {
@@ -370,11 +424,27 @@ void DrawOrderBlockObjects(const SMC_DrawConfig &config,
                   block.high,block.low,
                   SMC_DrawWithAlpha(base,150));
       datetime labelTime=block.time+(rightTime-block.time)/2;
-      string label=(block.internal ? "Int " : "Swing ")+
+      string label=SMC_TimeframeLabel(config.chartTimeframe)+" "+
+                   (block.internal ? "Int " : "Swing ")+
                    (block.bias>0 ? "Bull OB" : "Bear OB");
-      DrawText(objectName+"_Label",labelTime,(block.high+block.low)*0.5,
-               SMC_TimeframeLabel(config.chartTimeframe)+" "+label,
-               clrWhite,ANCHOR_CENTER);
+      double labelPrice=(block.high+block.low)*0.5;
+      int placedX=0,placedY=0,halfWidth=0;
+      datetime adjustedTime=labelTime;
+      double adjustedPrice=labelPrice;
+      if(placedLabelCount<ArraySize(labelX) &&
+         SMC_FindOrderBlockLabelPosition(labelTime,labelPrice,label,labelX,
+                                         labelY,labelHalfWidths,
+                                         placedLabelCount,adjustedTime,
+                                         adjustedPrice,placedX,placedY,
+                                         halfWidth))
+      {
+         labelX[placedLabelCount]=placedX;
+         labelY[placedLabelCount]=placedY;
+         labelHalfWidths[placedLabelCount]=halfWidth;
+         placedLabelCount++;
+      }
+      DrawText(objectName+"_Label",adjustedTime,adjustedPrice,
+               label,clrWhite,ANCHOR_CENTER);
    }
 }
 

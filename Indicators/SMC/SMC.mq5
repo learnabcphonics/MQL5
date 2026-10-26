@@ -869,21 +869,34 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,
 
    if(group==SMC_PANEL_STRUCTURE)
    {
-      RuntimeShowInternalStructure=PanelState.structures;
-      RuntimeShowSwingStructure=PanelState.structures;
+      RuntimeShowInternalStructure=PanelState.structures &&
+                                   (ShowInternalStructure ||
+                                    !ShowSwingStructure);
+      RuntimeShowSwingStructure=PanelState.structures &&
+                                (ShowSwingStructure ||
+                                 !ShowInternalStructure);
    }
    else if(group==SMC_PANEL_ORDER_BLOCKS)
    {
-      RuntimeShowInternalOrderBlocks=PanelState.orderBlocks;
-      RuntimeShowSwingOrderBlocks=PanelState.orderBlocks;
+      RuntimeShowInternalOrderBlocks=PanelState.orderBlocks &&
+                                     (ShowInternalOrderBlocks ||
+                                      !ShowSwingOrderBlocks);
+      RuntimeShowSwingOrderBlocks=PanelState.orderBlocks &&
+                                  (ShowSwingOrderBlocks ||
+                                   !ShowInternalOrderBlocks);
    }
    else if(group==SMC_PANEL_FVG)
       RuntimeShowFairValueGaps=PanelState.fairValueGaps;
    else if(group==SMC_PANEL_PREVIOUS_LEVELS)
    {
-      RuntimeShowDailyLevels=PanelState.previousLevels;
-      RuntimeShowWeeklyLevels=PanelState.previousLevels;
-      RuntimeShowMonthlyLevels=PanelState.previousLevels;
+      bool anyPreviousLevel=ShowDailyLevels || ShowWeeklyLevels ||
+                            ShowMonthlyLevels;
+      RuntimeShowDailyLevels=PanelState.previousLevels &&
+                             (ShowDailyLevels || !anyPreviousLevel);
+      RuntimeShowWeeklyLevels=PanelState.previousLevels &&
+                              (ShowWeeklyLevels || !anyPreviousLevel);
+      RuntimeShowMonthlyLevels=PanelState.previousLevels &&
+                               (ShowMonthlyLevels || !anyPreviousLevel);
    }
    else if(group==SMC_PANEL_STRONG_WEAK)
       RuntimeShowStrongWeakHighLow=PanelState.strongWeak;
@@ -896,12 +909,24 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,
                       group==SMC_PANEL_FVG ? PanelState.fairValueGaps :
                       group==SMC_PANEL_PREVIOUS_LEVELS ? PanelState.previousLevels :
                       PanelState.strongWeak);
-   if(groupEnabled)
+   if(group==SMC_PANEL_ORDER_BLOCKS)
    {
-      if(group==SMC_PANEL_ORDER_BLOCKS)
+      if(groupEnabled)
+      {
          DeleteObjectsWithPrefix(ObjectPrefix+"OB_");
-      LastProcessedBar=0;
+         datetime currentBarTime=iTime(_Symbol,_Period,0);
+         if(currentBarTime<=0)
+            PrintFormat("SMC: unable to read current bar time while enabling OB display (error=%d).",
+                        GetLastError());
+         else
+            DrawOrderBlockObjects(DrawConfig,OrderBlocks,currentBarTime,
+                                  PeriodSeconds(_Period));
+      }
+      else
+         HidePanelGroupObjects(group);
    }
+   else if(groupEnabled)
+      LastProcessedBar=0;
    else
       HidePanelGroupObjects(group);
    ChartRedraw(0);
