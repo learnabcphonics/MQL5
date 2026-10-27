@@ -3,7 +3,7 @@
 #ifndef SMC_ENGINE_MQH
 #define SMC_ENGINE_MQH
 
-#include <SMC/SMC_Types.mqh>
+#include <SMC/SMC_State.mqh>
 
 void SMC_ShiftPivotIndex(PivotState &pivot)
 {
@@ -13,41 +13,38 @@ void SMC_ShiftPivotIndex(PivotState &pivot)
 
 void SMC_UpdateTrailingLevels(const bool enabled,const datetime currentTime,
                               const double currentHigh,const double currentLow,
-                              PivotState &trailingTop,
-                              PivotState &trailingBottom)
+                              SMC_State &state)
 {
    if(!enabled)
       return;
-   if(trailingTop.initialized && currentHigh>=trailingTop.current)
+   if(state.TrailingTop.initialized &&
+      currentHigh>=state.TrailingTop.current)
    {
-      trailingTop.current=currentHigh;
-      trailingTop.time=currentTime;
-      trailingTop.index=0;
+      state.TrailingTop.current=currentHigh;
+      state.TrailingTop.time=currentTime;
+      state.TrailingTop.index=0;
    }
-   if(trailingBottom.initialized && currentLow<=trailingBottom.current)
+   if(state.TrailingBottom.initialized &&
+      currentLow<=state.TrailingBottom.current)
    {
-      trailingBottom.current=currentLow;
-      trailingBottom.time=currentTime;
-      trailingBottom.index=0;
+      state.TrailingBottom.current=currentLow;
+      state.TrailingBottom.time=currentTime;
+      state.TrailingBottom.index=0;
    }
 }
 
-void SMC_ShiftCalculationIndices(PivotState &swingHigh,PivotState &swingLow,
-                                 PivotState &internalHigh, PivotState &internalLow,
-                                 PivotState &equalHigh,PivotState &equalLow,
-                                 PivotState &trailingTop,PivotState &trailingBottom,
-                                 StructureDisplayState &latestStructures[])
+void SMC_ShiftCalculationIndices(SMC_State &state)
 {
-   SMC_ShiftPivotIndex(swingHigh);
-   SMC_ShiftPivotIndex(swingLow);
-   SMC_ShiftPivotIndex(internalHigh);
-   SMC_ShiftPivotIndex(internalLow);
-   SMC_ShiftPivotIndex(equalHigh);
-   SMC_ShiftPivotIndex(equalLow);
-   SMC_ShiftPivotIndex(trailingTop);
-   SMC_ShiftPivotIndex(trailingBottom);
-   for(int i=0;i<ArraySize(latestStructures);i++)
-      SMC_ShiftPivotIndex(latestStructures[i].pivot);
+   SMC_ShiftPivotIndex(state.SwingHigh);
+   SMC_ShiftPivotIndex(state.SwingLow);
+   SMC_ShiftPivotIndex(state.InternalHigh);
+   SMC_ShiftPivotIndex(state.InternalLow);
+   SMC_ShiftPivotIndex(state.EqualHigh);
+   SMC_ShiftPivotIndex(state.EqualLow);
+   SMC_ShiftPivotIndex(state.TrailingTop);
+   SMC_ShiftPivotIndex(state.TrailingBottom);
+   for(int i=0;i<ArraySize(state.LatestStructures);i++)
+      SMC_ShiftPivotIndex(state.LatestStructures[i].pivot);
 }
 
 void SMC_UpdateCurrentCalculationValues(const double currentHigh,
@@ -55,43 +52,39 @@ void SMC_UpdateCurrentCalculationValues(const double currentHigh,
                                        const double previousClose,
                                        const int ratesTotal,
                                        const ENUM_SMC_FILTER filter,
-                                       const double cumulativeRangeClosedSum,
-                                       double &parsedHighs[],double &parsedLows[],
-                                       double &atrCache[],double &meanRangeCache[],
-                                       double &trueRangeCache[])
+                                       SMC_State &state)
 {
-   int count=ArraySize(parsedHighs);
+   int count=ArraySize(state.ParsedHighs);
    if(count<2 || ratesTotal<2)
       return;
    double trueRange=MathMax(currentHigh-currentLow,
                      MathMax(MathAbs(currentHigh-previousClose),
                              MathAbs(currentLow-previousClose)));
-   trueRangeCache[0]=trueRange;
-   meanRangeCache[0]=(cumulativeRangeClosedSum+trueRange)/(ratesTotal-1);
-   if(atrCache[1]==DBL_MAX)
+   state.TrueRangeCache[0]=trueRange;
+   state.MeanRangeCache[0]=(state.CumulativeRangeClosedSum+trueRange)/
+                           (ratesTotal-1);
+   if(state.AtrCache[1]==DBL_MAX)
    {
       double seedSum=0.0;
       for(int i=1;i<count;i++)
-         seedSum+=trueRangeCache[i];
-      atrCache[0]=(seedSum+trueRange)/count;
+         seedSum+=state.TrueRangeCache[i];
+      state.AtrCache[0]=(seedSum+trueRange)/count;
    }
    else
-      atrCache[0]=(atrCache[1]*199.0+trueRange)/200.0;
+      state.AtrCache[0]=(state.AtrCache[1]*199.0+trueRange)/200.0;
 
-   double volatilityMeasure=(filter==SMC_ATR ? atrCache[0] : meanRangeCache[0]);
+   double volatilityMeasure=(filter==SMC_ATR ? state.AtrCache[0] :
+                                                state.MeanRangeCache[0]);
    bool volatileBar=(currentHigh-currentLow)>=2.0*volatilityMeasure;
-   parsedHighs[0]=(volatileBar ? currentLow : currentHigh);
-   parsedLows[0]=(volatileBar ? currentHigh : currentLow);
+   state.ParsedHighs[0]=(volatileBar ? currentLow : currentHigh);
+   state.ParsedLows[0]=(volatileBar ? currentHigh : currentLow);
 }
 
 bool SMC_InitializeCalculationCaches(const int ratesTotal,const int count,
                                      const double &high[],const double &low[],
                                      const double &close[],
                                      const ENUM_SMC_FILTER filter,
-                                     double &parsedHighs[],double &parsedLows[],
-                                     double &atrCache[],double &meanRangeCache[],
-                                     double &trueRangeCache[],
-                                     double &cumulativeRangeClosedSum)
+                                     SMC_State &state)
 {
    double cumulativeRange=0.0;
    for(int i=ratesTotal-1;i>=count;i--)
@@ -107,11 +100,11 @@ bool SMC_InitializeCalculationCaches(const int ratesTotal,const int count,
       double trueRange=MathMax(high[i]-low[i],
                         MathMax(MathAbs(high[i]-previousClose),
                                 MathAbs(low[i]-previousClose)));
-      trueRangeCache[i]=trueRange;
+      state.TrueRangeCache[i]=trueRange;
       cumulativeRange+=trueRange;
       int barIndex=ratesTotal-1-i;
-      meanRangeCache[i]=(barIndex>0 ? cumulativeRange/barIndex : DBL_MAX);
-      atrCache[i]=DBL_MAX;
+      state.MeanRangeCache[i]=(barIndex>0 ? cumulativeRange/barIndex : DBL_MAX);
+      state.AtrCache[i]=DBL_MAX;
    }
    int oldest=count-1;
    int seedIndex=MathMin(oldest,MathMax(0,count-200));
@@ -124,48 +117,44 @@ bool SMC_InitializeCalculationCaches(const int ratesTotal,const int count,
                        MathMax(MathAbs(high[i]-previousClose),
                                MathAbs(low[i]-previousClose)));
    }
-   atrCache[seedIndex]=(seedCount>0 ? seedSum/seedCount :
-                                      trueRangeCache[seedIndex]);
+   state.AtrCache[seedIndex]=(seedCount>0 ? seedSum/seedCount :
+                                            state.TrueRangeCache[seedIndex]);
    for(int i=seedIndex-1;i>=0;i--)
-      atrCache[i]=(atrCache[i+1]*199.0+trueRangeCache[i])/200.0;
+      state.AtrCache[i]=(state.AtrCache[i+1]*199.0+
+                         state.TrueRangeCache[i])/200.0;
    for(int i=oldest;i>=0;i--)
    {
-      double volatilityMeasure=(filter==SMC_ATR ? atrCache[i] : meanRangeCache[i]);
+      double volatilityMeasure=(filter==SMC_ATR ? state.AtrCache[i] :
+                                                   state.MeanRangeCache[i]);
       bool volatileBar=(high[i]-low[i])>=2.0*volatilityMeasure;
-      parsedHighs[i]=(volatileBar ? low[i] : high[i]);
-      parsedLows[i]=(volatileBar ? high[i] : low[i]);
+      state.ParsedHighs[i]=(volatileBar ? low[i] : high[i]);
+      state.ParsedLows[i]=(volatileBar ? high[i] : low[i]);
    }
-   cumulativeRangeClosedSum=cumulativeRange-trueRangeCache[0];
+   state.CumulativeRangeClosedSum=cumulativeRange-state.TrueRangeCache[0];
    return true;
 }
 
-bool SMC_AdvanceCalculationCaches(const int ratesTotal,const int lastRatesTotal,
+bool SMC_AdvanceCalculationCaches(const int ratesTotal,
                                  const int maxBars,const double &high[],
                                  const double &low[],const double &close[],
                                  const ENUM_SMC_FILTER filter,
-                                 double &cumulativeRangeClosedSum,
-                                 double &parsedHighs[],double &parsedLows[],
-                                 double &atrCache[],double &meanRangeCache[],
-                                 double &trueRangeCache[],
-                                 PivotState &swingHigh,PivotState &swingLow,
-                                 PivotState &internalHigh,PivotState &internalLow,
-                                 PivotState &equalHigh,PivotState &equalLow,
-                                 PivotState &trailingTop,PivotState &trailingBottom,
-                                 StructureDisplayState &latestStructures[])
+                                 SMC_State &state)
 {
-   int oldCount=ArraySize(parsedHighs);
+   int oldCount=ArraySize(state.ParsedHighs);
    int newCount=MathMin(ratesTotal,maxBars);
-   if(oldCount<2 || ArraySize(parsedLows)!=oldCount ||
-      ArraySize(atrCache)!=oldCount || ArraySize(meanRangeCache)!=oldCount ||
-      ArraySize(trueRangeCache)!=oldCount ||
-      oldCount!=MathMin(lastRatesTotal,maxBars) ||
-      ratesTotal<lastRatesTotal || ratesTotal>lastRatesTotal+1)
+   if(oldCount<2 || ArraySize(state.ParsedLows)!=oldCount ||
+      ArraySize(state.AtrCache)!=oldCount ||
+      ArraySize(state.MeanRangeCache)!=oldCount ||
+      ArraySize(state.TrueRangeCache)!=oldCount ||
+      oldCount!=MathMin(state.LastRatesTotal,maxBars) ||
+      ratesTotal<state.LastRatesTotal ||
+      ratesTotal>state.LastRatesTotal+1)
       return false;
-   if(ArrayResize(parsedHighs,newCount)!=newCount ||
-      ArrayResize(parsedLows,newCount)!=newCount ||
-      ArrayResize(atrCache,newCount)!=newCount ||
-      ArrayResize(meanRangeCache,newCount)!=newCount ||
-      ArrayResize(trueRangeCache,newCount)!=newCount)
+   if(ArrayResize(state.ParsedHighs,newCount)!=newCount ||
+      ArrayResize(state.ParsedLows,newCount)!=newCount ||
+      ArrayResize(state.AtrCache,newCount)!=newCount ||
+      ArrayResize(state.MeanRangeCache,newCount)!=newCount ||
+      ArrayResize(state.TrueRangeCache,newCount)!=newCount)
    {
       PrintFormat("SMC: unable to advance calculation caches (error=%d).",
                   GetLastError());
@@ -175,60 +164,60 @@ bool SMC_AdvanceCalculationCaches(const int ratesTotal,const int lastRatesTotal,
    double closedBarTrueRange=MathMax(high[1]-low[1],
                               MathMax(MathAbs(high[1]-close[2]),
                                       MathAbs(low[1]-close[2])));
-   cumulativeRangeClosedSum+=closedBarTrueRange;
+   state.CumulativeRangeClosedSum+=closedBarTrueRange;
    for(int i=newCount-1;i>=1;i--)
    {
       int source=i-1;
       if(source<oldCount)
       {
-         parsedHighs[i]=parsedHighs[source];
-         parsedLows[i]=parsedLows[source];
-         atrCache[i]=atrCache[source];
-         meanRangeCache[i]=meanRangeCache[source];
-         trueRangeCache[i]=trueRangeCache[source];
+         state.ParsedHighs[i]=state.ParsedHighs[source];
+         state.ParsedLows[i]=state.ParsedLows[source];
+         state.AtrCache[i]=state.AtrCache[source];
+         state.MeanRangeCache[i]=state.MeanRangeCache[source];
+         state.TrueRangeCache[i]=state.TrueRangeCache[source];
       }
    }
-   ArraySetAsSeries(parsedHighs,true);
-   ArraySetAsSeries(parsedLows,true);
-   ArraySetAsSeries(atrCache,true);
-   ArraySetAsSeries(meanRangeCache,true);
-   ArraySetAsSeries(trueRangeCache,true);
-   trueRangeCache[1]=closedBarTrueRange;
-   meanRangeCache[1]=(ratesTotal>2 ?
-                      cumulativeRangeClosedSum/(ratesTotal-2) : DBL_MAX);
-   if(atrCache[2]==DBL_MAX)
+   ArraySetAsSeries(state.ParsedHighs,true);
+   ArraySetAsSeries(state.ParsedLows,true);
+   ArraySetAsSeries(state.AtrCache,true);
+   ArraySetAsSeries(state.MeanRangeCache,true);
+   ArraySetAsSeries(state.TrueRangeCache,true);
+   state.TrueRangeCache[1]=closedBarTrueRange;
+   state.MeanRangeCache[1]=(ratesTotal>2 ?
+                            state.CumulativeRangeClosedSum/(ratesTotal-2) :
+                            DBL_MAX);
+   if(state.AtrCache[2]==DBL_MAX)
    {
       double seedSum=closedBarTrueRange;
       for(int i=2;i<newCount;i++)
-         seedSum+=trueRangeCache[i];
-      atrCache[1]=seedSum/newCount;
+         seedSum+=state.TrueRangeCache[i];
+      state.AtrCache[1]=seedSum/newCount;
    }
    else
-      atrCache[1]=(atrCache[2]*199.0+closedBarTrueRange)/200.0;
-   double closedVolatility=(filter==SMC_ATR ? atrCache[1] : meanRangeCache[1]);
+      state.AtrCache[1]=(state.AtrCache[2]*199.0+
+                         closedBarTrueRange)/200.0;
+   double closedVolatility=(filter==SMC_ATR ? state.AtrCache[1] :
+                                               state.MeanRangeCache[1]);
    bool closedVolatile=(high[1]-low[1])>=2.0*closedVolatility;
-   parsedHighs[1]=(closedVolatile ? low[1] : high[1]);
-   parsedLows[1]=(closedVolatile ? high[1] : low[1]);
+   state.ParsedHighs[1]=(closedVolatile ? low[1] : high[1]);
+   state.ParsedLows[1]=(closedVolatile ? high[1] : low[1]);
    double previousClose=(ratesTotal>1 ? close[1] : close[0]);
    SMC_UpdateCurrentCalculationValues(high[0],low[0],previousClose,ratesTotal,
-                                      filter,cumulativeRangeClosedSum,
-                                      parsedHighs,parsedLows,atrCache,
-                                      meanRangeCache,trueRangeCache);
-   SMC_ShiftCalculationIndices(swingHigh,swingLow,internalHigh,internalLow,
-                               equalHigh,equalLow,trailingTop,trailingBottom,
-                               latestStructures);
+                                      filter,state);
+   SMC_ShiftCalculationIndices(state);
    return true;
 }
 
 bool SMC_RemoveMitigatedOrderBlocks(const double high,const double low,
                                     const double close,const datetime barTime,
                                     const ENUM_SMC_MITIGATION mitigation,
-                                    OrderBlockState &orderBlocks[],
+                                    SMC_State &state,
                                     OrderBlockState &removed[],
                                     int &removedCount)
 {
    removedCount=0;
-   if(ArrayResize(removed,ArraySize(orderBlocks))!=ArraySize(orderBlocks))
+   if(ArrayResize(removed,ArraySize(state.OrderBlocks))!=
+      ArraySize(state.OrderBlocks))
    {
       PrintFormat("SMC: unable to allocate mitigated order block results (error=%d).",
                   GetLastError());
@@ -236,22 +225,22 @@ bool SMC_RemoveMitigatedOrderBlocks(const double high,const double low,
    }
    double bearishSource=(mitigation==SMC_CLOSE ? close : high);
    double bullishSource=(mitigation==SMC_CLOSE ? close : low);
-   for(int i=ArraySize(orderBlocks)-1;i>=0;i--)
+   for(int i=ArraySize(state.OrderBlocks)-1;i>=0;i--)
    {
-      if(orderBlocks[i].created==barTime)
+      if(state.OrderBlocks[i].created==barTime)
          continue;
-      bool mitigated=(orderBlocks[i].bias<0 &&
-                      bearishSource>orderBlocks[i].high) ||
-                     (orderBlocks[i].bias>0 &&
-                      bullishSource<orderBlocks[i].low);
+      bool mitigated=(state.OrderBlocks[i].bias<0 &&
+                      bearishSource>state.OrderBlocks[i].high) ||
+                     (state.OrderBlocks[i].bias>0 &&
+                      bullishSource<state.OrderBlocks[i].low);
       if(!mitigated)
          continue;
-      removed[removedCount]=orderBlocks[i];
+      removed[removedCount]=state.OrderBlocks[i];
       removedCount++;
-      for(int j=i;j<ArraySize(orderBlocks)-1;j++)
-         orderBlocks[j]=orderBlocks[j+1];
-      int newSize=ArraySize(orderBlocks)-1;
-      if(ArrayResize(orderBlocks,newSize)!=newSize)
+      for(int j=i;j<ArraySize(state.OrderBlocks)-1;j++)
+         state.OrderBlocks[j]=state.OrderBlocks[j+1];
+      int newSize=ArraySize(state.OrderBlocks)-1;
+      if(ArrayResize(state.OrderBlocks,newSize)!=newSize)
       {
          PrintFormat("SMC: unable to remove mitigated order block (error=%d).",
                      GetLastError());
@@ -313,7 +302,7 @@ void SMC_StoreOrderBlock(const PivotState &pivot,const bool internal,const int b
    orderBlocks[count]=block;
 }
 
-void SMC_DetectStructure(const bool internal,const int legSize,int &legState,
+void SMC_DetectStructureCore(const bool internal,const int legSize,int &legState,
                          PivotState &pivotHigh,PivotState &pivotLow,
                          int &trendBias,const int i,const int ratesTotal,
                          const datetime &time[],const double &open[],
@@ -413,6 +402,38 @@ void SMC_DetectStructure(const bool internal,const int legSize,int &legState,
       SMC_StoreOrderBlock(pivotLow,internal,-1,time,parsedHighs,parsedLows,
                           ratesTotal,i,storeOrderBlocks,orderBlocks);
    }
+}
+
+void SMC_DetectStructure(const bool internal,const int legSize,
+                         const int i,const int ratesTotal,
+                         const datetime &time[],const double &open[],
+                         const double &high[],const double &low[],
+                         const double &close[],const bool confluenceFilter,
+                         const ENUM_SMC_SIZE labelSize,
+                         const bool storeOrderBlocks,SMC_State &state,
+                         StructureEvent &events[],int &eventCount)
+{
+   if(internal)
+   {
+      SMC_DetectStructureCore(true,legSize,state.InternalLeg,
+                              state.InternalHigh,state.InternalLow,
+                              state.InternalBias,i,ratesTotal,time,open,high,low,
+                              close,confluenceFilter,labelSize,state.SwingHigh,
+                              state.SwingLow,state.TrailingTop,
+                              state.TrailingBottom,state.TrailingAnchorTime,
+                              state.ParsedHighs,state.ParsedLows,
+                              storeOrderBlocks,state.OrderBlocks,events,
+                              eventCount);
+      return;
+   }
+
+   SMC_DetectStructureCore(false,legSize,state.SwingLeg,state.SwingHigh,
+                           state.SwingLow,state.SwingBias,i,ratesTotal,time,
+                           open,high,low,close,confluenceFilter,labelSize,
+                           state.SwingHigh,state.SwingLow,state.TrailingTop,
+                           state.TrailingBottom,state.TrailingAnchorTime,
+                           state.ParsedHighs,state.ParsedLows,
+                           storeOrderBlocks,state.OrderBlocks,events,eventCount);
 }
 
 void SMC_DetectEqualHighLow(const int size,int &legState,
@@ -518,20 +539,18 @@ double SMC_CalculateFVGThreshold(const MqlRates &bars[],const double point)
 }
 
 bool SMC_UpdateFVGThreshold(const MqlRates &bars[],const double point,
-                            double &threshold)
+                            SMC_State &state)
 {
    int copied=ArraySize(bars);
    if(copied<3)
       return false;
-   threshold=SMC_CalculateFVGThreshold(bars,point);
+   state.CurrentFVGThreshold=SMC_CalculateFVGThreshold(bars,point);
    return true;
 }
 
 bool SMC_AnalyzeHistoricalFVG(const MqlRates &bars[],const bool autoThreshold,
                               const int extend,const int periodSeconds,
-                              const double point,
-                              double &currentThreshold,
-                              FairValueGapState &gaps[])
+                              const double point,SMC_State &state)
 {
    int copied=ArraySize(bars);
    if(copied<3)
@@ -553,8 +572,8 @@ bool SMC_AnalyzeHistoricalFVG(const MqlRates &bars[],const bool autoThreshold,
       sampleCount++;
       thresholds[i]=cumulativeDelta/sampleCount*2.0;
    }
-   currentThreshold=thresholds[0];
-   if(ArrayResize(gaps,0)!=0)
+   state.CurrentFVGThreshold=thresholds[0];
+   if(ArrayResize(state.FairValueGaps,0)!=0)
    {
       PrintFormat("SMC: unable to reset FVG state (error=%d).",GetLastError());
       return false;
@@ -587,7 +606,7 @@ bool SMC_AnalyzeHistoricalFVG(const MqlRates &bars[],const bool autoThreshold,
          double middle=(bars[i].low+bars[i+2].high)*0.5;
          if(!SMC_AddFairValueGap(bars[i+1].time,1,bars[i+2].high,bars[i].low,
                                  bars[i+1].time,right,bars[i].low,middle,middle,
-                                 bars[i+2].high,gaps))
+                                 bars[i+2].high,state.FairValueGaps))
             return false;
          drawn++;
       }
@@ -596,7 +615,7 @@ bool SMC_AnalyzeHistoricalFVG(const MqlRates &bars[],const bool autoThreshold,
          double middle=(bars[i].high+bars[i+2].low)*0.5;
          if(!SMC_AddFairValueGap(bars[i+1].time,-1,bars[i+2].low,bars[i].high,
                                  bars[i+1].time,right,bars[i].high,middle,middle,
-                                 bars[i+2].low,gaps))
+                                 bars[i+2].low,state.FairValueGaps))
             return false;
          drawn++;
       }
@@ -606,9 +625,8 @@ bool SMC_AnalyzeHistoricalFVG(const MqlRates &bars[],const bool autoThreshold,
 
 bool SMC_UpdateFairValueGaps(const MqlRates &bars[],const datetime chartBarTime,
                              const int chartPeriodSeconds,const int extend,
-                             const double threshold,const bool autoThreshold,
-                             const double point,
-                             FairValueGapState &gaps[],
+                             const bool autoThreshold,const double point,
+                             SMC_State &state,
                              FairValueGapState &removed[],int &removedCount,
                              FairValueGapState &added[],int &addedCount)
 {
@@ -616,7 +634,7 @@ bool SMC_UpdateFairValueGaps(const MqlRates &bars[],const datetime chartBarTime,
    addedCount=0;
    if(ArraySize(bars)<4)
       return false;
-   int maxRemoved=ArraySize(gaps);
+   int maxRemoved=ArraySize(state.FairValueGaps);
    if(ArrayResize(removed,maxRemoved)!=maxRemoved ||
       ArrayResize(added,2)!=2)
    {
@@ -625,18 +643,21 @@ bool SMC_UpdateFairValueGaps(const MqlRates &bars[],const datetime chartBarTime,
       return false;
    }
 
-   for(int i=ArraySize(gaps)-1;i>=0;i--)
+   for(int i=ArraySize(state.FairValueGaps)-1;i>=0;i--)
    {
-      bool mitigated=(gaps[i].bias>0 && bars[0].low<gaps[i].bottom) ||
-                     (gaps[i].bias<0 && bars[0].high>gaps[i].top);
+      bool mitigated=
+         (state.FairValueGaps[i].bias>0 &&
+          bars[0].low<state.FairValueGaps[i].bottom) ||
+         (state.FairValueGaps[i].bias<0 &&
+          bars[0].high>state.FairValueGaps[i].top);
       if(!mitigated)
          continue;
-      removed[removedCount]=gaps[i];
+      removed[removedCount]=state.FairValueGaps[i];
       removedCount++;
-      for(int j=i;j<ArraySize(gaps)-1;j++)
-         gaps[j]=gaps[j+1];
-      int newSize=ArraySize(gaps)-1;
-      if(ArrayResize(gaps,newSize)!=newSize)
+      for(int j=i;j<ArraySize(state.FairValueGaps)-1;j++)
+         state.FairValueGaps[j]=state.FairValueGaps[j+1];
+      int newSize=ArraySize(state.FairValueGaps)-1;
+      if(ArrayResize(state.FairValueGaps,newSize)!=newSize)
       {
          PrintFormat("SMC: unable to remove mitigated FVG (error=%d).",GetLastError());
          return false;
@@ -650,20 +671,24 @@ bool SMC_UpdateFairValueGaps(const MqlRates &bars[],const datetime chartBarTime,
                        MathMax(MathAbs(bars[2].open)*100.0,point);
    bool bullish=(bars[1].low>bars[3].high &&
                  bars[2].close>bars[3].high &&
-                 (!autoThreshold || signedChange>threshold));
+                 (!autoThreshold ||
+                  signedChange>state.CurrentFVGThreshold));
    bool bearish=(bars[1].high<bars[3].low &&
                  bars[2].close<bars[3].low &&
-                 (!autoThreshold || -signedChange>threshold));
+                 (!autoThreshold ||
+                  -signedChange>state.CurrentFVGThreshold));
    int periodSeconds=(chartPeriodSeconds>0 ? chartPeriodSeconds : 60);
    datetime right=bars[1].time+extend*periodSeconds;
-   if(bullish && !SMC_HasFairValueGap(bars[2].time,1,gaps))
+   if(bullish &&
+      !SMC_HasFairValueGap(bars[2].time,1,state.FairValueGaps))
    {
       double middle=(bars[1].low+bars[3].high)*0.5;
       if(SMC_AddFairValueGap(bars[2].time,1,bars[3].high,bars[1].low,
                              bars[2].time,right,bars[1].low,middle,middle,
-                             bars[3].high,gaps))
+                             bars[3].high,state.FairValueGaps))
       {
-         added[addedCount]=gaps[ArraySize(gaps)-1];
+         added[addedCount]=state.FairValueGaps[
+                               ArraySize(state.FairValueGaps)-1];
          addedCount++;
       }
       else
@@ -672,14 +697,16 @@ bool SMC_UpdateFairValueGaps(const MqlRates &bars[],const datetime chartBarTime,
          return false;
       }
    }
-   if(bearish && !SMC_HasFairValueGap(bars[2].time,-1,gaps))
+   if(bearish &&
+      !SMC_HasFairValueGap(bars[2].time,-1,state.FairValueGaps))
    {
       double middle=(bars[1].high+bars[3].low)*0.5;
       if(SMC_AddFairValueGap(bars[2].time,-1,bars[3].low,bars[1].high,
                              bars[2].time,right,bars[1].high,middle,middle,
-                             bars[3].low,gaps))
+                             bars[3].low,state.FairValueGaps))
       {
-         added[addedCount]=gaps[ArraySize(gaps)-1];
+         added[addedCount]=state.FairValueGaps[
+                               ArraySize(state.FairValueGaps)-1];
          addedCount++;
       }
       else

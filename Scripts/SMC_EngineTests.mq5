@@ -53,11 +53,33 @@ void RunStructureDetection(int &legState,PivotState &pivotHigh,
                            StructureEvent &events[],int &eventCount,
                            OrderBlockState &orderBlocks[])
 {
-   SMC_DetectStructure(false,2,legState,pivotHigh,pivotLow,bias,i,ratesTotal,
-                       time,open,high,low,close,false,SMC_SMALL,
-                       pivotHigh,pivotLow,trailingTop,trailingBottom,
-                       trailingAnchorTime,parsedHighs,parsedLows,false,
-                       orderBlocks,events,eventCount);
+   SMC_State state;
+   state.SwingLeg=legState;
+   state.SwingHigh=pivotHigh;
+   state.SwingLow=pivotLow;
+   state.SwingBias=bias;
+   state.TrailingTop=trailingTop;
+   state.TrailingBottom=trailingBottom;
+   state.TrailingAnchorTime=trailingAnchorTime;
+   int parsedCount=ArraySize(parsedHighs);
+   ArrayResize(state.ParsedHighs,parsedCount);
+   ArrayResize(state.ParsedLows,parsedCount);
+   ArrayCopy(state.ParsedHighs,parsedHighs);
+   ArrayCopy(state.ParsedLows,parsedLows);
+   int blockCount=ArraySize(orderBlocks);
+   ArrayResize(state.OrderBlocks,blockCount);
+   ArrayCopy(state.OrderBlocks,orderBlocks);
+   SMC_DetectStructure(false,2,i,ratesTotal,time,open,high,low,close,false,
+                       SMC_SMALL,false,state,events,eventCount);
+   legState=state.SwingLeg;
+   pivotHigh=state.SwingHigh;
+   pivotLow=state.SwingLow;
+   bias=state.SwingBias;
+   trailingTop=state.TrailingTop;
+   trailingBottom=state.TrailingBottom;
+   trailingAnchorTime=state.TrailingAnchorTime;
+   ArrayResize(orderBlocks,ArraySize(state.OrderBlocks));
+   ArrayCopy(orderBlocks,state.OrderBlocks);
 }
 
 void TestPivotLowConfirmation()
@@ -375,15 +397,15 @@ void TestVolatilityParsedExtremes()
 {
    int count=250;
    double high[],low[],close[],parsedHighs[],parsedLows[];
-   double atrCache[],meanRangeCache[],trueRangeCache[];
+   SMC_State state;
    ArrayResize(high,count);
    ArrayResize(low,count);
    ArrayResize(close,count);
-   ArrayResize(parsedHighs,count);
-   ArrayResize(parsedLows,count);
-   ArrayResize(atrCache,count);
-   ArrayResize(meanRangeCache,count);
-   ArrayResize(trueRangeCache,count);
+   ArrayResize(state.ParsedHighs,count);
+   ArrayResize(state.ParsedLows,count);
+   ArrayResize(state.AtrCache,count);
+   ArrayResize(state.MeanRangeCache,count);
+   ArrayResize(state.TrueRangeCache,count);
    for(int i=0;i<count;i++)
    {
       high[i]=101.0;
@@ -392,16 +414,11 @@ void TestVolatilityParsedExtremes()
    }
    high[4]=110.0;
 
-   double cumulativeRangeClosedSum=0.0;
    bool initialized=SMC_InitializeCalculationCaches(count,count,high,low,close,
-                                                    SMC_ATR,parsedHighs,
-                                                    parsedLows,atrCache,
-                                                    meanRangeCache,
-                                                    trueRangeCache,
-                                                    cumulativeRangeClosedSum);
-   Check(initialized && parsedHighs[4]==low[4] &&
-         parsedLows[4]==high[4] && parsedHighs[3]==high[3] &&
-         parsedLows[3]==low[3],
+                                                    SMC_ATR,state);
+   Check(initialized && state.ParsedHighs[4]==low[4] &&
+         state.ParsedLows[4]==high[4] && state.ParsedHighs[3]==high[3] &&
+         state.ParsedLows[3]==low[3],
          "ATR filter swaps parsed extremes only on the volatile bar");
 }
 

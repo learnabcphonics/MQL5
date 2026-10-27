@@ -15,15 +15,11 @@ ENUM_LINE_STYLE LineStyle(const ENUM_SMC_LINE_STYLE style)
 
 color SMC_DrawBullColor(const SMC_DrawConfig &config,const bool internal)
 {
-   if(config.style==SMC_MONOCHROME)
-      return C'178,181,190';
    return internal ? config.internalBullishColor : config.swingBullishColor;
 }
 
 color SMC_DrawBearColor(const SMC_DrawConfig &config,const bool internal)
 {
-   if(config.style==SMC_MONOCHROME)
-      return C'93,96,107';
    return internal ? config.internalBearishColor : config.swingBearishColor;
 }
 
@@ -102,7 +98,7 @@ void UpdateMarketBiasLabel(const SMC_DrawConfig &config,const int swingBias,
       return;
    ObjectSetInteger(0,name,OBJPROP_CORNER,CORNER_LEFT_UPPER);
    ObjectSetInteger(0,name,OBJPROP_XDISTANCE,10);
-   ObjectSetInteger(0,name,OBJPROP_YDISTANCE,172);
+   ObjectSetInteger(0,name,OBJPROP_YDISTANCE,40);
    ObjectSetInteger(0,name,OBJPROP_COLOR,
                     swingBias>0 ? SMC_DrawBullColor(config,false) :
                     (swingBias<0 ? SMC_DrawBearColor(config,false) : C'135,139,148'));
@@ -400,9 +396,7 @@ void DrawOrderBlockObjects(const SMC_DrawConfig &config,
          continue;
       }
       color base;
-      if(config.style==SMC_MONOCHROME)
-         base=(block.bias<0 ? C'93,96,107' : C'178,181,190');
-      else if(block.internal)
+      if(block.internal)
          base=(block.bias<0 ? config.internalBearishOBColor :
                               config.internalBullishOBColor);
       else

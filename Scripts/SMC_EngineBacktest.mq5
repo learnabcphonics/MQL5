@@ -309,30 +309,25 @@ bool LoadChartHistory(MqlRates &rates[],double &open[],double &high[],
 }
 
 bool InitializeCaches(const int count,const double &high[],const double &low[],
-                      const double &close[],double &parsedHighs[],
-                      double &parsedLows[],double &atrCache[],
-                      double &meanRangeCache[],double &trueRangeCache[],
-                      double &cumulativeRangeClosedSum)
+                      const double &close[],SMC_State &state)
 {
-   if(ArrayResize(parsedHighs,count)!=count ||
-      ArrayResize(parsedLows,count)!=count ||
-      ArrayResize(atrCache,count)!=count ||
-      ArrayResize(meanRangeCache,count)!=count ||
-      ArrayResize(trueRangeCache,count)!=count)
+   if(ArrayResize(state.ParsedHighs,count)!=count ||
+      ArrayResize(state.ParsedLows,count)!=count ||
+      ArrayResize(state.AtrCache,count)!=count ||
+      ArrayResize(state.MeanRangeCache,count)!=count ||
+      ArrayResize(state.TrueRangeCache,count)!=count)
    {
       PrintFormat("SMC_BACKTEST ERROR: unable to allocate indicator caches (error=%d).",
                   GetLastError());
       return false;
    }
-   ArraySetAsSeries(parsedHighs,true);
-   ArraySetAsSeries(parsedLows,true);
-   ArraySetAsSeries(atrCache,true);
-   ArraySetAsSeries(meanRangeCache,true);
-   ArraySetAsSeries(trueRangeCache,true);
+   ArraySetAsSeries(state.ParsedHighs,true);
+   ArraySetAsSeries(state.ParsedLows,true);
+   ArraySetAsSeries(state.AtrCache,true);
+   ArraySetAsSeries(state.MeanRangeCache,true);
+   ArraySetAsSeries(state.TrueRangeCache,true);
    return SMC_InitializeCalculationCaches(count,count,high,low,close,
-                                          SMC_ATR,parsedHighs,parsedLows,
-                                          atrCache,meanRangeCache,trueRangeCache,
-                                          cumulativeRangeClosedSum);
+                                          SMC_ATR,state);
 }
 
 void OnStart()
@@ -352,29 +347,13 @@ void OnStart()
       return;
 
    int count=ArraySize(rates);
-   double parsedHighs[],parsedLows[],atrCache[],meanRangeCache[],trueRangeCache[];
-   double cumulativeRangeClosedSum=0.0;
-   if(!InitializeCaches(count,high,low,close,parsedHighs,parsedLows,atrCache,
-                        meanRangeCache,trueRangeCache,
-                        cumulativeRangeClosedSum))
+   SMC_State state;
+   if(!InitializeCaches(count,high,low,close,state))
    {
       Print("SMC_BACKTEST ERROR: failed to initialize calculation caches.");
       return;
    }
 
-   PivotState swingHigh,swingLow,internalHigh,internalLow;
-   PivotState trailingTop,trailingBottom;
-   ZeroMemory(swingHigh);
-   ZeroMemory(swingLow);
-   ZeroMemory(internalHigh);
-   ZeroMemory(internalLow);
-   ZeroMemory(trailingTop);
-   ZeroMemory(trailingBottom);
-   int swingLeg=0,internalLeg=0;
-   int swingBias=0,internalBias=0;
-   datetime trailingAnchorTime=0;
-   StructureDisplayState latestStructures[4];
-   OrderBlockState orderBlocks[];
    BacktestTrade trades[];
    int signalsSkipped=0;
    int trackedOrderBlocks=0;
@@ -389,29 +368,23 @@ void OnStart()
    {
       StructureEvent events[2];
       int eventCount=0;
-      SMC_DetectStructure(false,SwingLength,swingLeg,swingHigh,swingLow,
-                          swingBias,i,count,time,open,high,low,close,false,
-                          SMC_SMALL,swingHigh,swingLow,trailingTop,
-                          trailingBottom,trailingAnchorTime,parsedHighs,
-                          parsedLows,true,orderBlocks,events,eventCount);
-      ProcessStructureEvents(events,eventCount,i,rates,atrCache,
+      SMC_DetectStructure(false,SwingLength,i,count,time,open,high,low,close,
+                          false,SMC_SMALL,true,state,events,eventCount);
+      ProcessStructureEvents(events,eventCount,i,rates,state.AtrCache,
                              EvaluationHorizonBars,StopLossATR,RiskReward,
                              trades,signalsSkipped);
-      TrackNewOrderBlocks(orderBlocks,trackedOrderBlocks,atrCache[i],
+      TrackNewOrderBlocks(state.OrderBlocks,trackedOrderBlocks,state.AtrCache[i],
                           allOrderBlockStats,swingOrderBlockStats,
                           internalOrderBlockStats);
 
       eventCount=0;
-      SMC_DetectStructure(true,5,internalLeg,internalHigh,internalLow,
-                          internalBias,i,count,time,open,high,low,close,
-                          InternalConfluenceFilter,SMC_TINY,
-                          swingHigh,swingLow,trailingTop,trailingBottom,
-                          trailingAnchorTime,parsedHighs,parsedLows,true,
-                          orderBlocks,events,eventCount);
-      ProcessStructureEvents(events,eventCount,i,rates,atrCache,
+      SMC_DetectStructure(true,5,i,count,time,open,high,low,close,
+                          InternalConfluenceFilter,SMC_TINY,true,state,
+                          events,eventCount);
+      ProcessStructureEvents(events,eventCount,i,rates,state.AtrCache,
                              EvaluationHorizonBars,StopLossATR,RiskReward,
                              trades,signalsSkipped);
-      TrackNewOrderBlocks(orderBlocks,trackedOrderBlocks,atrCache[i],
+      TrackNewOrderBlocks(state.OrderBlocks,trackedOrderBlocks,state.AtrCache[i],
                           allOrderBlockStats,swingOrderBlockStats,
                           internalOrderBlockStats);
    }
