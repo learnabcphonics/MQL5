@@ -408,7 +408,7 @@ int OnInit()
    PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,BullColor(false));
    PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,BearColor(false));
    PlotIndexSetDouble(0,PLOT_EMPTY_VALUE,EMPTY_VALUE);
-   IndicatorSetString(INDICATOR_SHORTNAME,"Smart Money Concepts [LuxAlgo]");
+   IndicatorSetString(INDICATOR_SHORTNAME,"Smart Money Concepts");
    return INIT_SUCCEEDED;
 }
 
