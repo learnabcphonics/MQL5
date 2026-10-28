@@ -225,27 +225,35 @@ bool SMC_RemoveMitigatedOrderBlocks(const double high,const double low,
    }
    double bearishSource=(mitigation==SMC_CLOSE ? close : high);
    double bullishSource=(mitigation==SMC_CLOSE ? close : low);
-   for(int i=ArraySize(state.OrderBlocks)-1;i>=0;i--)
+   int sourceCount=ArraySize(state.OrderBlocks);
+   int retainedCount=0;
+   for(int i=0;i<sourceCount;i++)
    {
-      if(state.OrderBlocks[i].created==barTime)
-         continue;
-      bool mitigated=(state.OrderBlocks[i].bias<0 &&
-                      bearishSource>state.OrderBlocks[i].high) ||
-                     (state.OrderBlocks[i].bias>0 &&
-                      bullishSource<state.OrderBlocks[i].low);
-      if(!mitigated)
-         continue;
-      removed[removedCount]=state.OrderBlocks[i];
-      removedCount++;
-      for(int j=i;j<ArraySize(state.OrderBlocks)-1;j++)
-         state.OrderBlocks[j]=state.OrderBlocks[j+1];
-      int newSize=ArraySize(state.OrderBlocks)-1;
-      if(ArrayResize(state.OrderBlocks,newSize)!=newSize)
+      OrderBlockState block=state.OrderBlocks[i];
+      if(block.created==barTime)
       {
-         PrintFormat("SMC: unable to remove mitigated order block (error=%d).",
-                     GetLastError());
-         return false;
+         state.OrderBlocks[retainedCount]=block;
+         retainedCount++;
+         continue;
       }
+      bool mitigated=(block.bias<0 && bearishSource>block.high) ||
+                     (block.bias>0 && bullishSource<block.low);
+      if(mitigated)
+      {
+         removed[removedCount]=block;
+         removedCount++;
+      }
+      else
+      {
+         state.OrderBlocks[retainedCount]=block;
+         retainedCount++;
+      }
+   }
+   if(ArrayResize(state.OrderBlocks,retainedCount)!=retainedCount)
+   {
+      PrintFormat("SMC: unable to resize mitigated order block state (error=%d).",
+                  GetLastError());
+      return false;
    }
    return true;
 }

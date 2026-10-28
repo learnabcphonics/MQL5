@@ -68,11 +68,7 @@ bool SMC_ResetState(SMC_State &state)
    ZeroMemory(state.TrailingBottom);
    state.TrailingAnchorTime=0;
    for(int i=0;i<ArraySize(state.LatestStructures);i++)
-   {
-      state.LatestStructures[i].valid=false;
-      state.LatestStructures[i].id="";
-      state.LatestStructures[i].tag="";
-   }
+      ZeroMemory(state.LatestStructures[i]);
    state.PresentStructuresDirty=false;
    state.SwingBias=0;
    state.InternalBias=0;

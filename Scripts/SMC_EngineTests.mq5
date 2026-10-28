@@ -3,6 +3,7 @@
 #property strict
 
 #include <SMC/SMC_Engine.mqh>
+#include <SMC/SMC_Draw.mqh>
 
 int TestsPassed=0;
 int TestsFailed=0;
@@ -422,6 +423,96 @@ void TestVolatilityParsedExtremes()
          "ATR filter swaps parsed extremes only on the volatile bar");
 }
 
+void TestMitigationAndCreatedBarSafety()
+{
+   SMC_State state;
+   datetime barTime=(datetime)1700000100;
+   OrderBlockState blocks[];
+   ArrayResize(blocks,3);
+   blocks[0].bias=1; blocks[0].low=90.0; blocks[0].high=95.0;
+   blocks[0].created=barTime-60; blocks[0].time=barTime-120;
+   blocks[1].bias=-1; blocks[1].low=105.0; blocks[1].high=110.0;
+   blocks[1].created=barTime-60; blocks[1].time=barTime-120;
+   blocks[2].bias=1; blocks[2].low=80.0; blocks[2].high=85.0;
+   blocks[2].created=barTime; blocks[2].time=barTime;
+   ArrayResize(state.OrderBlocks,3);
+   ArrayCopy(state.OrderBlocks,blocks);
+   OrderBlockState removed[];
+   int removedCount=0;
+   bool ok=SMC_RemoveMitigatedOrderBlocks(89.0,111.0,89.0,barTime,
+                                          SMC_CLOSE,state,removed,removedCount);
+   Check(ok && removedCount==1 && ArraySize(state.OrderBlocks)==2 &&
+         state.OrderBlocks[1].created==barTime,
+         "close mitigation removes the bullish OB and retains same-bar/current-bar safety");
+
+   removedCount=0;
+   ArrayResize(state.OrderBlocks,0);
+   ArrayResize(state.OrderBlocks,2);
+   state.OrderBlocks[0].bias=-1; state.OrderBlocks[0].low=105.0;
+   state.OrderBlocks[0].high=110.0; state.OrderBlocks[0].created=barTime-60;
+   state.OrderBlocks[1].bias=1; state.OrderBlocks[1].low=80.0;
+   state.OrderBlocks[1].high=85.0; state.OrderBlocks[1].created=barTime-60;
+   ok=SMC_RemoveMitigatedOrderBlocks(89.0,111.0,100.0,barTime,
+                                     SMC_HIGH_LOW,state,removed,removedCount);
+   Check(ok && removedCount==2 && ArraySize(state.OrderBlocks)==0,
+         "high-low mitigation uses high for bearish and low for bullish blocks");
+}
+
+void TestFairValueGapMitigationAndDuplicate()
+{
+   SMC_State state;
+   datetime now=(datetime)1700000100;
+   ArrayResize(state.FairValueGaps,0);
+   bool added=SMC_AddFairValueGap(now,1,100.0,110.0,now-60,now+600,
+                                 110.0,105.0,105.0,100.0,state.FairValueGaps);
+   Check(added && ArraySize(state.FairValueGaps)==1,
+         "adds a valid bullish FVG");
+   bool duplicate=SMC_AddFairValueGap(now,1,100.0,110.0,now-60,now+600,
+                                      110.0,105.0,105.0,100.0,
+                                      state.FairValueGaps);
+   Check(!duplicate && ArraySize(state.FairValueGaps)==1,
+         "duplicate FVG at the same time and bias is ignored");
+
+   MqlRates bars[4];
+   for(int i=0;i<4;i++)
+      ZeroMemory(bars[i]);
+   bars[0].time=now;
+   bars[0].low=99.0;
+   bars[0].high=120.0;
+   bars[0].open=110.0;
+   bars[0].close=100.0;
+   for(int i=1;i<4;i++)
+   {
+      bars[i].time=now-(i*60);
+      bars[i].open=100.0+(double)i;
+      bars[i].close=100.0+(double)i;
+      bars[i].low=99.0+(double)i;
+      bars[i].high=101.0+(double)i;
+   }
+   FairValueGapState removed[];
+   FairValueGapState addedGaps[];
+   int removedCount=0,addedCount=0;
+   state.CurrentFVGThreshold=0.0;
+   bool updated=SMC_UpdateFairValueGaps(bars,now+60,60,20,false,0.00001,
+                                        state,removed,removedCount,
+                                        addedGaps,addedCount);
+   Check(updated && removedCount==1 && ArraySize(state.FairValueGaps)==0,
+         "bullish FVG is mitigated when latest low crosses its lower bound");
+}
+
+void TestInvalidZoneGeometry()
+{
+   SMC_DrawConfig config;
+   ZeroMemory(config);
+   config.objectPrefix="SMC_TEST_INVALID_";
+   datetime start=(datetime)1700000000;
+   datetime finish=start+3600;
+   DrawZoneBox(config.objectPrefix+"Zone",start,finish,100.0,100.0,clrRed);
+   string name=config.objectPrefix+"Zone";
+   Check(ObjectFind(0,name)<0,
+         "zone geometry with equal top and bottom is deleted instead of drawn");
+}
+
 void OnStart()
 {
    TestsPassed=0;
@@ -437,6 +528,9 @@ void OnStart()
    TestBullishOrderBlockSelection();
    TestBearishOrderBlockSelection();
    TestVolatilityParsedExtremes();
+   TestMitigationAndCreatedBarSafety();
+   TestFairValueGapMitigationAndDuplicate();
+   TestInvalidZoneGeometry();
 
    PrintFormat("SMC_ENGINE_TEST SUMMARY: %d passed, %d failed",
                TestsPassed,TestsFailed);

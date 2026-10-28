@@ -7,11 +7,11 @@
 #include <SMC/SMC_Types.mqh>
 #include <SMC/SMC_Engine.mqh>
 #include <SMC/SMC_State.mqh>
+#include <SMC/SMC_Palette.mqh>
 #property indicator_buffers 5
 #property indicator_plots   1
 #property indicator_type1   DRAW_COLOR_CANDLES
 #property indicator_label1  "SMC trend candles"
-#property indicator_color1  clrMediumSeaGreen,clrIndianRed
 
 input group "Smart Money Concepts"
 input bool ColorCandles = false;
@@ -26,18 +26,14 @@ input bool ShowMarketBias = true;
 input group "Real Time Internal Structure"
 input bool ShowInternalStructure = true;
 input ENUM_SMC_SHOW InternalBullishStructure = SMC_ALL;
-input color InternalBullishColor = C'8,153,129';
 input ENUM_SMC_SHOW InternalBearishStructure = SMC_ALL;
-input color InternalBearishColor = C'242,54,69';
 input bool InternalConfluenceFilter = false;
 input ENUM_SMC_SIZE InternalLabelSize = SMC_TINY;
 
 input group "Real Time Swing Structure"
 input bool ShowSwingStructure = true;
 input ENUM_SMC_SHOW SwingBullishStructure = SMC_ALL;
-input color SwingBullishColor = C'8,153,129';
 input ENUM_SMC_SHOW SwingBearishStructure = SMC_ALL;
-input color SwingBearishColor = C'242,54,69';
 input ENUM_SMC_SIZE SwingLabelSize = SMC_SMALL;
 input bool ShowSwingPoints = false;
 input int SwingLength = 50;
@@ -51,10 +47,6 @@ input int SwingOrderBlocksToShow = 5;
 input int OrderBlockExtend = 20;
 input ENUM_SMC_FILTER OrderBlockFilter = SMC_ATR;
 input ENUM_SMC_MITIGATION OrderBlockMitigation = SMC_HIGH_LOW;
-input color InternalBullishOBColor = C'49,121,245';
-input color InternalBearishOBColor = C'247,124,128';
-input color SwingBullishOBColor = C'24,72,204';
-input color SwingBearishOBColor = C'178,40,51';
 
 input group "EQH/EQL"
 input bool ShowEqualHighsLows = true;
@@ -65,27 +57,19 @@ input ENUM_SMC_SIZE EqualHighLowLabelSize = SMC_TINY;
 input group "Fair Value Gaps"
 input bool ShowFairValueGaps = false;
 input bool FairValueGapAutoThreshold = false;
-input color BullishFVGColor = C'0,255,104';
-input color BearishFVGColor = C'255,0,8';
 input int FairValueGapExtend = 1;
 input int MaxFairValueGapsToShow = 5;
 
 input group "Previous Period Highs & Lows"
 input bool ShowDailyLevels = false;
 input ENUM_SMC_LINE_STYLE DailyLevelsStyle = SMC_SOLID;
-input color DailyLevelsColor = C'33,87,243';
 input bool ShowWeeklyLevels = false;
 input ENUM_SMC_LINE_STYLE WeeklyLevelsStyle = SMC_SOLID;
-input color WeeklyLevelsColor = C'33,87,243';
 input bool ShowMonthlyLevels = false;
 input ENUM_SMC_LINE_STYLE MonthlyLevelsStyle = SMC_SOLID;
-input color MonthlyLevelsColor = C'33,87,243';
 
 input group "Premium & Discount Zones"
 input bool ShowPremiumDiscountZones = false;
-input color PremiumZoneColor = C'242,54,69';
-input color EquilibriumZoneColor = C'135,139,148';
-input color DiscountZoneColor = C'8,153,129';
 
 double CandleOpen[], CandleHigh[], CandleLow[], CandleClose[], CandleColorIndex[];
 string ObjectPrefix = "SMC_";
@@ -94,15 +78,17 @@ SMC_State State;
 bool PreviousTradeHistoryVisibility = false;
 bool TradeHistoryVisibilityCaptured = false;
 bool TradeHistoryVisibilityChanged = false;
+ENUM_TIMEFRAMES LastChartPeriod = PERIOD_CURRENT;
+bool TimeframeSwitchPending = false;
 
 color BullColor(const bool internal)
 {
-   return internal ? InternalBullishColor : SwingBullishColor;
+   return SMC_COLOR_BULLISH;
 }
 
 color BearColor(const bool internal)
 {
-   return internal ? InternalBearishColor : SwingBearishColor;
+   return SMC_COLOR_BEARISH;
 }
 
 void ConfigureDrawing()
@@ -117,35 +103,35 @@ void ConfigureDrawing()
    DrawConfig.internalBearishStructure=InternalBearishStructure;
    DrawConfig.swingBullishStructure=SwingBullishStructure;
    DrawConfig.swingBearishStructure=SwingBearishStructure;
-   DrawConfig.internalBullishColor=InternalBullishColor;
-   DrawConfig.internalBearishColor=InternalBearishColor;
-   DrawConfig.swingBullishColor=SwingBullishColor;
-   DrawConfig.swingBearishColor=SwingBearishColor;
+   DrawConfig.internalBullishColor=SMC_COLOR_BULLISH;
+   DrawConfig.internalBearishColor=SMC_COLOR_BEARISH;
+   DrawConfig.swingBullishColor=SMC_COLOR_BULLISH;
+   DrawConfig.swingBearishColor=SMC_COLOR_BEARISH;
    DrawConfig.showInternalOrderBlocks=ShowInternalOrderBlocks;
    DrawConfig.showSwingOrderBlocks=ShowSwingOrderBlocks;
    DrawConfig.internalOrderBlocksToShow=InternalOrderBlocksToShow;
    DrawConfig.swingOrderBlocksToShow=SwingOrderBlocksToShow;
    DrawConfig.orderBlockExtend=OrderBlockExtend;
-   DrawConfig.internalBullishOBColor=InternalBullishOBColor;
-   DrawConfig.internalBearishOBColor=InternalBearishOBColor;
-   DrawConfig.swingBullishOBColor=SwingBullishOBColor;
-   DrawConfig.swingBearishOBColor=SwingBearishOBColor;
+   DrawConfig.internalBullishOBColor=SMC_COLOR_BULLISH;
+   DrawConfig.internalBearishOBColor=SMC_COLOR_BEARISH;
+   DrawConfig.swingBullishOBColor=SMC_COLOR_BULLISH;
+   DrawConfig.swingBearishOBColor=SMC_COLOR_BEARISH;
    DrawConfig.showSwingPoints=ShowSwingPoints;
    DrawConfig.swingLength=SwingLength;
    DrawConfig.showStrongWeakHighLow=ShowStrongWeakHighLow;
    DrawConfig.showPremiumDiscountZones=ShowPremiumDiscountZones;
-   DrawConfig.premiumZoneColor=PremiumZoneColor;
-   DrawConfig.equilibriumZoneColor=EquilibriumZoneColor;
-   DrawConfig.discountZoneColor=DiscountZoneColor;
+   DrawConfig.premiumZoneColor=SMC_COLOR_BEARISH;
+   DrawConfig.equilibriumZoneColor=SMC_COLOR_EQUILIBRIUM;
+   DrawConfig.discountZoneColor=SMC_COLOR_BULLISH;
    DrawConfig.showDailyLevels=ShowDailyLevels;
    DrawConfig.showWeeklyLevels=ShowWeeklyLevels;
    DrawConfig.showMonthlyLevels=ShowMonthlyLevels;
    DrawConfig.dailyLevelsStyle=DailyLevelsStyle;
    DrawConfig.weeklyLevelsStyle=WeeklyLevelsStyle;
    DrawConfig.monthlyLevelsStyle=MonthlyLevelsStyle;
-   DrawConfig.dailyLevelsColor=DailyLevelsColor;
-   DrawConfig.weeklyLevelsColor=WeeklyLevelsColor;
-   DrawConfig.monthlyLevelsColor=MonthlyLevelsColor;
+   DrawConfig.dailyLevelsColor=SMC_COLOR_PREVIOUS_LEVEL;
+   DrawConfig.weeklyLevelsColor=SMC_COLOR_PREVIOUS_LEVEL;
+   DrawConfig.monthlyLevelsColor=SMC_COLOR_PREVIOUS_LEVEL;
 }
 
 #include <SMC/SMC_Draw.mqh>
@@ -252,8 +238,8 @@ void DrawActiveFairValueGaps(const MqlRates &bars[])
          continue;
       }
       gap.right=right;
-      color gapColor=(gap.bias>0 ? BullishFVGColor : BearishFVGColor);
-      DrawFairValueGap(DrawConfig,gap,SMC_DrawWithAlpha(gapColor,77));
+      color gapColor=(gap.bias>0 ? SMC_COLOR_BULLISH : SMC_COLOR_BEARISH);
+      DrawFairValueGap(DrawConfig,gap,gapColor);
    }
 }
 
@@ -394,6 +380,8 @@ int OnInit()
       }
    }
    ConfigureDrawing();
+   LastChartPeriod=_Period;
+   TimeframeSwitchPending=false;
    SetIndexBuffer(0,CandleOpen,INDICATOR_DATA);
    SetIndexBuffer(1,CandleHigh,INDICATOR_DATA);
    SetIndexBuffer(2,CandleLow,INDICATOR_DATA);
@@ -425,6 +413,22 @@ void OnDeinit(const int reason)
          PrintFormat("SMC: unable to restore trade-history visibility (error=%d).",
                      GetLastError());
    }
+}
+
+void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
+{
+   if(id!=CHARTEVENT_CHART_CHANGE)
+      return;
+   ENUM_TIMEFRAMES currentPeriod=(ENUM_TIMEFRAMES)ChartPeriod(0);
+   if(currentPeriod==PERIOD_CURRENT || currentPeriod==LastChartPeriod)
+      return;
+   LastChartPeriod=currentPeriod;
+   TimeframeSwitchPending=true;
+   ConfigureDrawing();
+   DeleteSMCObjects(ObjectPrefix);
+   if(!SMC_ResetState(State))
+      Print("SMC: failed to reset state after chart timeframe change.");
+   ChartRedraw(0);
 }
 
 bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &open[],
@@ -638,13 +642,13 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
    if(ShowFairValueGaps)
       DrawFVGs();
    if(ShowDailyLevels)
-      DrawPreviousPeriodLevels(DrawConfig,PERIOD_D1,"D",DailyLevelsStyle,DailyLevelsColor,
+      DrawPreviousPeriodLevels(DrawConfig,PERIOD_D1,"D",DailyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    if(ShowWeeklyLevels)
-      DrawPreviousPeriodLevels(DrawConfig,PERIOD_W1,"W",WeeklyLevelsStyle,WeeklyLevelsColor,
+      DrawPreviousPeriodLevels(DrawConfig,PERIOD_W1,"W",WeeklyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    if(ShowMonthlyLevels)
-      DrawPreviousPeriodLevels(DrawConfig,PERIOD_MN1,"M",MonthlyLevelsStyle,MonthlyLevelsColor,
+      DrawPreviousPeriodLevels(DrawConfig,PERIOD_MN1,"M",MonthlyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    DrawTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
                       time[0],periodSeconds);
@@ -668,6 +672,15 @@ int OnCalculate(const int rates_total,const int prev_calculated,
    ArraySetAsSeries(high,true);
    ArraySetAsSeries(low,true);
    ArraySetAsSeries(close,true);
+   if(TimeframeSwitchPending || LastChartPeriod!=_Period)
+   {
+      LastChartPeriod=_Period;
+      TimeframeSwitchPending=false;
+      ConfigureDrawing();
+      if(!RebuildHistoricalState(rates_total,time,open,high,low,close))
+         return 0;
+      return rates_total;
+   }
    if(prev_calculated>0 && State.LastProcessedBar>0 &&
       time[0]>State.LastProcessedBar)
    {
