@@ -21,35 +21,21 @@ struct SMC_DrawConfig
    ENUM_SMC_SHOW internalBearishStructure;
    ENUM_SMC_SHOW swingBullishStructure;
    ENUM_SMC_SHOW swingBearishStructure;
-   color internalBullishColor;
-   color internalBearishColor;
-   color swingBullishColor;
-   color swingBearishColor;
    bool showInternalOrderBlocks;
    bool showSwingOrderBlocks;
    int internalOrderBlocksToShow;
    int swingOrderBlocksToShow;
    int orderBlockExtend;
-   color internalBullishOBColor;
-   color internalBearishOBColor;
-   color swingBullishOBColor;
-   color swingBearishOBColor;
    bool showSwingPoints;
    int swingLength;
    bool showStrongWeakHighLow;
    bool showPremiumDiscountZones;
-   color premiumZoneColor;
-   color equilibriumZoneColor;
-   color discountZoneColor;
    bool showDailyLevels;
    bool showWeeklyLevels;
    bool showMonthlyLevels;
    ENUM_SMC_LINE_STYLE dailyLevelsStyle;
    ENUM_SMC_LINE_STYLE weeklyLevelsStyle;
    ENUM_SMC_LINE_STYLE monthlyLevelsStyle;
-   color dailyLevelsColor;
-   color weeklyLevelsColor;
-   color monthlyLevelsColor;
 };
 
 struct PivotState

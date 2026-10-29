@@ -41,6 +41,76 @@ void DeleteObjectsWithPrefix(const string prefix)
    }
 }
 
+int SMC_ZoneZOrder(const string objectName)
+{
+   if(StringFind(objectName,"PL_")==0)
+      return -50;
+   if(StringFind(objectName,"PD_")==0)
+      return -40;
+   if(StringFind(objectName,"FVG_")==0)
+      return -30;
+   if(StringFind(objectName,"OB_")==0)
+      return -20;
+   if(StringFind(objectName,"STR_")==0)
+      return 0;
+   if(StringFind(objectName,"SW_")==0)
+      return 0;
+   return -10;
+}
+
+double SMC_LabelOffsetPrice(const string objectName,const double basePrice,const double span)
+{
+   double step=MathMax(0.000001,MathAbs(span)*0.08);
+   if(StringFind(objectName,"OB_")==0)
+      return basePrice+step;
+   if(StringFind(objectName,"FVG_")==0)
+      return basePrice+step*0.5;
+   if(StringFind(objectName,"PD_")==0)
+      return basePrice+step*0.75;
+   return basePrice;
+}
+
+bool SMC_ZoneRectanglesOverlap(const datetime leftA,const datetime rightA,
+                               const double topA,const double bottomA,
+                               const datetime leftB,const datetime rightB,
+                               const double topB,const double bottomB)
+{
+   if(rightA<=leftB || rightB<=leftA)
+      return false;
+   double highA=MathMax(topA,bottomA);
+   double lowA=MathMin(topA,bottomA);
+   double highB=MathMax(topB,bottomB);
+   double lowB=MathMin(topB,bottomB);
+   return !(highA<=lowB || highB<=lowA);
+}
+
+void DeleteOverlappingZoneObjects(const string prefix,
+                                 const datetime left,const datetime right,
+                                 const double top,const double bottom)
+{
+   for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
+   {
+      string name=ObjectName(0,i,-1,-1);
+      if(StringFind(name,prefix)!=0)
+         continue;
+      if(ObjectFind(0,name)<0)
+         continue;
+      if(ObjectGetInteger(0,name,OBJPROP_TYPE)!=(int)OBJ_RECTANGLE)
+         continue;
+      datetime objLeft=(datetime)ObjectGetInteger(0,name,OBJPROP_TIME,0);
+      datetime objRight=(datetime)ObjectGetInteger(0,name,OBJPROP_TIME,1);
+      if(objRight<=objLeft)
+         continue;
+      double objTop=ObjectGetDouble(0,name,OBJPROP_PRICE,0);
+      double objBottom=ObjectGetDouble(0,name,OBJPROP_PRICE,1);
+      if(SMC_ZoneRectanglesOverlap(left,right,top,bottom,
+                                  objLeft,objRight,objTop,objBottom))
+      {
+         ObjectDelete(0,name);
+      }
+   }
+}
+
 void DeleteSMCObjects(const string prefix)
 {
    DeleteObjectsWithPrefix(prefix);
@@ -70,7 +140,7 @@ void DrawText(const string name,const datetime when,const double price,
    ObjectSetInteger(0,name,OBJPROP_COLOR,textColor);
    ObjectSetInteger(0,name,OBJPROP_ANCHOR,anchor);
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
-   ObjectSetInteger(0,name,OBJPROP_ZORDER,10);
+   ObjectSetInteger(0,name,OBJPROP_ZORDER,100);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
    ObjectSetString(0,name,OBJPROP_TOOLTIP,"\n");
@@ -86,7 +156,7 @@ string BiasText(const int bias)
 void UpdateMarketBiasLabel(const SMC_DrawConfig &config,const int swingBias,
                            const int internalBias)
 {
-   string name=config.objectPrefix+"MarketBias";
+   string name=config.objectPrefix+"BIAS";
    if(!config.showMarketBias)
    {
       ObjectDelete(0,name);
@@ -122,9 +192,9 @@ void DrawHorizontalStructure(const SMC_DrawConfig &config,
    int slot=(internal ? 0 : 2)+(bullish ? 0 : 1);
    if(latestStructures[slot].valid && latestStructures[slot].id!=id)
    {
-      ObjectDelete(0,config.objectPrefix+"StructureLine_"+
+      ObjectDelete(0,config.objectPrefix+"STR_Line_"+
                      latestStructures[slot].id);
-      ObjectDelete(0,config.objectPrefix+"StructureLabel_"+
+      ObjectDelete(0,config.objectPrefix+"STR_Label_"+
                      latestStructures[slot].id);
    }
    latestStructures[slot].pivot=pivot;
@@ -149,8 +219,8 @@ void RenderPresentStructures(const SMC_DrawConfig &config,
    {
       if(!latestStructures[i].valid)
          continue;
-      string lineName=config.objectPrefix+"StructureLine_"+latestStructures[i].id;
-      string labelName=config.objectPrefix+"StructureLabel_"+latestStructures[i].id;
+      string lineName=config.objectPrefix+"STR_Line_"+latestStructures[i].id;
+      string labelName=config.objectPrefix+"STR_Label_"+latestStructures[i].id;
       PivotState pivot=latestStructures[i].pivot;
       datetime rightTime=latestStructures[i].rightTime;
       if(ObjectFind(0,lineName)<0)
@@ -193,8 +263,8 @@ void ExtendPresentStructures(const SMC_DrawConfig &config,
       if(!latestStructures[i].valid)
          continue;
       latestStructures[i].rightTime=rightTime;
-      string lineName=config.objectPrefix+"StructureLine_"+latestStructures[i].id;
-      string labelName=config.objectPrefix+"StructureLabel_"+latestStructures[i].id;
+      string lineName=config.objectPrefix+"STR_Line_"+latestStructures[i].id;
+      string labelName=config.objectPrefix+"STR_Label_"+latestStructures[i].id;
       PivotState pivot=latestStructures[i].pivot;
       if(ObjectFind(0,lineName)>=0)
       {
@@ -239,7 +309,7 @@ void DrawZoneBox(const string name,const datetime startTime,const datetime endTi
    ObjectSetInteger(0,name,OBJPROP_COLOR,rgbColor);
    ObjectSetInteger(0,name,OBJPROP_FILL,true);
    ObjectSetInteger(0,name,OBJPROP_BACK,true);
-   ObjectSetInteger(0,name,OBJPROP_ZORDER,-1);
+   ObjectSetInteger(0,name,OBJPROP_ZORDER,SMC_ZoneZOrder(name));
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_SELECTED,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
@@ -253,10 +323,11 @@ void DrawEqualLevelEvent(const SMC_DrawConfig &config,
    if(!event.valid)
       return;
    string kind=(event.high ? "EQH" : "EQL");
-   DeleteObjectsWithPrefix(config.objectPrefix+kind+"_Line_");
-   DeleteObjectsWithPrefix(config.objectPrefix+kind+"_Label_");
    string id=IntegerToString((int)event.secondTime);
    string lineName=config.objectPrefix+kind+"_Line_"+id;
+   string labelName=config.objectPrefix+kind+"_Label_"+id;
+   ObjectDelete(0,lineName);
+   ObjectDelete(0,labelName);
    if(!ObjectCreate(0,lineName,OBJ_TREND,0,event.firstTime,event.firstPrice,
                     event.secondTime,event.secondPrice))
       return;
@@ -272,15 +343,47 @@ void DrawFairValueGap(const SMC_DrawConfig &config,const FairValueGapState &gap,
 {
    string id=(gap.bias>0 ? "Bull_" : "Bear_")+
              IntegerToString((int)gap.time);
-   DrawZoneBox(config.objectPrefix+"FVG_"+id+"_1",gap.left,gap.right,
+   string firstName=config.objectPrefix+"FVG_"+id+"_1";
+   string secondName=config.objectPrefix+"FVG_"+id+"_2";
+   bool hasOverlap=false;
+   for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
+   {
+      string name=ObjectName(0,i,-1,-1);
+      if(StringFind(name,config.objectPrefix+"OB_")==0 &&
+         ObjectFind(0,name)>=0 &&
+         ObjectGetInteger(0,name,OBJPROP_TYPE)==(int)OBJ_RECTANGLE)
+      {
+         datetime obLeft=(datetime)ObjectGetInteger(0,name,OBJPROP_TIME,0);
+         datetime obRight=(datetime)ObjectGetInteger(0,name,OBJPROP_TIME,1);
+         double obTop=ObjectGetDouble(0,name,OBJPROP_PRICE,0);
+         double obBottom=ObjectGetDouble(0,name,OBJPROP_PRICE,1);
+         if(SMC_ZoneRectanglesOverlap(gap.left,gap.right,
+                                     gap.top,gap.bottom,
+                                     obLeft,obRight,obTop,obBottom))
+         {
+            hasOverlap=true;
+            break;
+         }
+      }
+   }
+   if(hasOverlap)
+   {
+      ObjectDelete(0,firstName);
+      ObjectDelete(0,secondName);
+      ObjectDelete(0,config.objectPrefix+"FVG_"+id+"_Label");
+      return;
+   }
+   DrawZoneBox(firstName,gap.left,gap.right,
                gap.firstTop,gap.firstBottom,zoneColor);
-   DrawZoneBox(config.objectPrefix+"FVG_"+id+"_2",gap.left,gap.right,
+   DrawZoneBox(secondName,gap.left,gap.right,
                gap.secondTop,gap.secondBottom,zoneColor);
    datetime middleTime=gap.left+(gap.right-gap.left)/2;
    double middlePrice=(gap.top+gap.bottom)*0.5;
+   double labelPrice=SMC_LabelOffsetPrice(config.objectPrefix+"FVG_"+id,
+                                         middlePrice,MathAbs(gap.top-gap.bottom));
    string label=SMC_TimeframeLabel(config.chartTimeframe)+" "+
                 (gap.bias>0 ? "Bullish FVG" : "Bearish FVG");
-   DrawText(config.objectPrefix+"FVG_"+id+"_Label",middleTime,middlePrice,
+   DrawText(config.objectPrefix+"FVG_"+id+"_Label",middleTime,labelPrice,
             label,SMC_COLOR_LABEL,ANCHOR_CENTER);
 }
 
@@ -408,6 +511,8 @@ void DrawOrderBlockObjects(const SMC_DrawConfig &config,
    int safePeriodSecondsForCache=MathMax(1,periodSeconds);
    int extendBarsForCache=MathMax(1,config.orderBlockExtend);
    long extensionSecondsForCache=(long)safePeriodSecondsForCache*extendBarsForCache;
+   string keepNames[];
+   ArrayResize(keepNames,0);
    for(int i=0;i<count;i++)
    {
       blockRight[i]=(datetime)((long)lastTime+extensionSecondsForCache);
@@ -438,9 +543,26 @@ void DrawOrderBlockObjects(const SMC_DrawConfig &config,
          ObjectDelete(0,objectName+"_Origin");
          continue;
       }
+
+      bool hiddenByOverlap=false;
+      for(int j=0;j<i;j++)
+      {
+         if(!SMC_OrderBlocksOverlap(block,blockRight[i],
+                                   orderBlocks[j],blockRight[j]))
+            continue;
+         hiddenByOverlap=true;
+         break;
+      }
+      if(hiddenByOverlap)
+      {
+         ObjectDelete(0,objectName);
+         ObjectDelete(0,objectName+"_Label");
+         ObjectDelete(0,objectName+"_Origin");
+         continue;
+      }
+
       color base=SMC_OrderBlockBaseColor(config,block);
       datetime rightTime=blockRight[i];
-
       color drawColor=base;
       for(int j=0;j<i;j++)
       {
@@ -457,11 +579,19 @@ void DrawOrderBlockObjects(const SMC_DrawConfig &config,
       if(ObjectFind(0,objectName)<0)
          continue;
       ObjectDelete(0,objectName+"_Origin");
+      ArrayResize(keepNames,ArraySize(keepNames)+1);
+      keepNames[ArraySize(keepNames)-1]=objectName;
+      ArrayResize(keepNames,ArraySize(keepNames)+1);
+      keepNames[ArraySize(keepNames)-1]=objectName+"_Label";
+      ArrayResize(keepNames,ArraySize(keepNames)+1);
+      keepNames[ArraySize(keepNames)-1]=objectName+"_Origin";
       datetime labelTime=block.time+(rightTime-block.time)/2;
       string label=SMC_TimeframeLabel(config.chartTimeframe)+" "+
-                   (block.internal ? "Int " : "Swing ")+
+                   (block.internal ? "Int " : "Swing ")+ 
                    (block.bias>0 ? "Bull OB" : "Bear OB");
       double labelPrice=(block.high+block.low)*0.5;
+      labelPrice=SMC_LabelOffsetPrice(objectName,labelPrice,
+                                     MathAbs(block.high-block.low));
       int placedX=0,placedY=0,halfWidth=0;
       datetime adjustedTime=labelTime;
       double adjustedPrice=labelPrice;
@@ -480,6 +610,24 @@ void DrawOrderBlockObjects(const SMC_DrawConfig &config,
       DrawText(objectName+"_Label",adjustedTime,adjustedPrice,
                label,SMC_COLOR_LABEL,ANCHOR_CENTER);
    }
+   for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
+   {
+      string existingName=ObjectName(0,i,-1,-1);
+      if(StringFind(existingName,config.objectPrefix+"OB_")==0)
+      {
+         bool keep=false;
+         for(int j=0;j<ArraySize(keepNames);j++)
+         {
+            if(existingName==keepNames[j])
+            {
+               keep=true;
+               break;
+            }
+         }
+         if(!keep)
+            ObjectDelete(0,existingName);
+      }
+   }
 }
 
 void DrawSwingLabels(const SMC_DrawConfig &config,const datetime &time[],
@@ -487,22 +635,22 @@ void DrawSwingLabels(const SMC_DrawConfig &config,const datetime &time[],
                      const int i,const int swingLength,
                      const PivotState &swingHigh,const PivotState &swingLow)
 {
-   if(!config.showSwingPoints) return;
+   if(!config.showSwingPoints)
+   {
+      DeleteObjectsWithPrefix(config.objectPrefix+"SW_High_");
+      DeleteObjectsWithPrefix(config.objectPrefix+"SW_Low_");
+      return;
+   }
    int candidate=i+swingLength;
    bool drawHigh=(swingHigh.initialized && swingHigh.index==candidate);
    bool drawLow=(swingLow.initialized && swingLow.index==candidate);
-   if(drawHigh || drawLow)
-   {
-      DeleteObjectsWithPrefix(config.objectPrefix+"SwingHigh_");
-      DeleteObjectsWithPrefix(config.objectPrefix+"SwingLow_");
-   }
    if(drawHigh)
-      DrawText(config.objectPrefix+"SwingHigh_"+IntegerToString((int)time[candidate]),time[candidate],
+      DrawText(config.objectPrefix+"SW_High_"+IntegerToString((int)time[candidate]),time[candidate],
                high[candidate],(!swingHigh.previousInitialized ? "H" :
                                 swingHigh.current>swingHigh.previous ? "HH" : "LH"),
                SMC_DrawBearColor(config,false),ANCHOR_LOWER);
    if(drawLow)
-      DrawText(config.objectPrefix+"SwingLow_"+IntegerToString((int)time[candidate]),time[candidate],
+      DrawText(config.objectPrefix+"SW_Low_"+IntegerToString((int)time[candidate]),time[candidate],
                low[candidate],(!swingLow.previousInitialized ? "L" :
                                 swingLow.current<swingLow.previous ? "LL" : "HL"),
                SMC_DrawBullColor(config,false),ANCHOR_UPPER);
@@ -571,12 +719,12 @@ void DrawPreviousPeriodLevels(const SMC_DrawConfig &config,
    ObjectSetInteger(0,lowName,OBJPROP_STYLE,LineStyle(style));
    ObjectSetInteger(0,highName,OBJPROP_RAY_RIGHT,false);
    ObjectSetInteger(0,lowName,OBJPROP_RAY_RIGHT,false);
-   string highLabel=(label=="D" ? "Previous Daily High (PDH)" :
-                     label=="W" ? "Previous Weekly High (PWH)" :
-                                   "Previous Monthly High (PMH)");
-   string lowLabel=(label=="D" ? "Previous Daily Low (PDL)" :
-                    label=="W" ? "Previous Weekly Low (PWL)" :
-                                  "Previous Monthly Low (PML)");
+   string highLabel=(label=="PL_D" ? "Previous Daily High (PDH)" :
+                     label=="PL_W" ? "Previous Weekly High (PWH)" :
+                                      "Previous Monthly High (PMH)");
+   string lowLabel=(label=="PL_D" ? "Previous Daily Low (PDL)" :
+                    label=="PL_W" ? "Previous Weekly Low (PWL)" :
+                                     "Previous Monthly Low (PML)");
    DrawText(config.objectPrefix+label+"H_Label",labelTime,previousHigh,
             highLabel,lineColor,ANCHOR_LEFT);
    DrawText(config.objectPrefix+label+"L_Label",labelTime,previousLow,
@@ -589,18 +737,18 @@ void DrawTrailingLevels(const SMC_DrawConfig &config,const PivotState &trailingT
 {
    if(!config.showStrongWeakHighLow)
    {
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_High");
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_Low");
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_High_Label");
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_Low_Label");
+      ObjectDelete(0,config.objectPrefix+"SW_High");
+      ObjectDelete(0,config.objectPrefix+"SW_Low");
+      ObjectDelete(0,config.objectPrefix+"SW_High_Label");
+      ObjectDelete(0,config.objectPrefix+"SW_Low_Label");
       return;
    }
    if(!trailingTop.initialized || !trailingBottom.initialized) return;
    int seconds=MathMax(1,periodSeconds);
    datetime end=lastTime+seconds*20;
    datetime labelTime=lastTime+seconds*2;
-   string hi=config.objectPrefix+"StrongWeak_High";
-   string lo=config.objectPrefix+"StrongWeak_Low";
+   string hi=config.objectPrefix+"SW_High";
+   string lo=config.objectPrefix+"SW_Low";
    if(ObjectFind(0,hi)<0)
       ObjectCreate(0,hi,OBJ_TREND,0,trailingTop.time,trailingTop.current,
                    end,trailingTop.current);
@@ -621,11 +769,11 @@ void DrawTrailingLevels(const SMC_DrawConfig &config,const PivotState &trailingT
    ObjectSetInteger(0,lo,OBJPROP_COLOR,SMC_DrawBullColor(config,false));
    ObjectSetInteger(0,hi,OBJPROP_RAY_RIGHT,false);
    ObjectSetInteger(0,lo,OBJPROP_RAY_RIGHT,false);
-   DrawText(config.objectPrefix+"StrongWeak_High_Label",labelTime,trailingTop.current,
+   DrawText(config.objectPrefix+"SW_High_Label",labelTime,trailingTop.current,
             SMC_TimeframeLabel(config.chartTimeframe)+" "+
             (swingBias<0 ? "Strong High" : "Weak High"),
             SMC_DrawBearColor(config,false),ANCHOR_LEFT);
-   DrawText(config.objectPrefix+"StrongWeak_Low_Label",labelTime,trailingBottom.current,
+   DrawText(config.objectPrefix+"SW_Low_Label",labelTime,trailingBottom.current,
             SMC_TimeframeLabel(config.chartTimeframe)+" "+
             (swingBias>0 ? "Strong Low" : "Weak Low"),
             SMC_DrawBullColor(config,false),ANCHOR_LEFT);
@@ -642,20 +790,20 @@ void SMC_DrawUpdateTrailingLevels(const SMC_DrawConfig &config,
    int seconds=MathMax(1,periodSeconds);
    if(!config.showStrongWeakHighLow)
    {
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_High");
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_Low");
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_High_Label");
-      ObjectDelete(0,config.objectPrefix+"StrongWeak_Low_Label");
+      ObjectDelete(0,config.objectPrefix+"SW_High");
+      ObjectDelete(0,config.objectPrefix+"SW_Low");
+      ObjectDelete(0,config.objectPrefix+"SW_High_Label");
+      ObjectDelete(0,config.objectPrefix+"SW_Low_Label");
    }
    if(config.showStrongWeakHighLow && trailingTop.initialized &&
       trailingBottom.initialized)
    {
       datetime end=currentTime+seconds*20;
       datetime labelTime=currentTime+seconds*2;
-      string highLine=config.objectPrefix+"StrongWeak_High";
-      string lowLine=config.objectPrefix+"StrongWeak_Low";
-      string highLabel=config.objectPrefix+"StrongWeak_High_Label";
-      string lowLabel=config.objectPrefix+"StrongWeak_Low_Label";
+      string highLine=config.objectPrefix+"SW_High";
+      string lowLine=config.objectPrefix+"SW_Low";
+      string highLabel=config.objectPrefix+"SW_High_Label";
+      string lowLabel=config.objectPrefix+"SW_Low_Label";
       if(ObjectFind(0,highLine)>=0)
       {
          MoveObjectPointIfChanged(highLine,0,trailingTop.time,trailingTop.current);
@@ -694,12 +842,12 @@ void DrawPremiumDiscount(const SMC_DrawConfig &config,
    if(!config.showPremiumDiscountZones || !trailingTop.initialized ||
       !trailingBottom.initialized || trailingTop.current<=trailingBottom.current)
    {
-      ObjectDelete(0,config.objectPrefix+"Zone_Premium");
-      ObjectDelete(0,config.objectPrefix+"Zone_Equilibrium");
-      ObjectDelete(0,config.objectPrefix+"Zone_Discount");
-      ObjectDelete(0,config.objectPrefix+"Zone_Premium_Label");
-      ObjectDelete(0,config.objectPrefix+"Zone_Equilibrium_Label");
-      ObjectDelete(0,config.objectPrefix+"Zone_Discount_Label");
+      ObjectDelete(0,config.objectPrefix+"PD_Premium");
+      ObjectDelete(0,config.objectPrefix+"PD_Equilibrium");
+      ObjectDelete(0,config.objectPrefix+"PD_Discount");
+      ObjectDelete(0,config.objectPrefix+"PD_Premium_Label");
+      ObjectDelete(0,config.objectPrefix+"PD_Equilibrium_Label");
+      ObjectDelete(0,config.objectPrefix+"PD_Discount_Label");
       return;
    }
    double top=trailingTop.current,bottom=trailingBottom.current;
@@ -712,21 +860,27 @@ void DrawPremiumDiscount(const SMC_DrawConfig &config,
    double eqTop=0.525*top+0.475*bottom;
    double eqBottom=0.525*bottom+0.475*top;
    double discountTop=0.95*bottom+0.05*top;
-   DrawZoneBox(config.objectPrefix+"Zone_Premium",start,finish,top,premiumBottom,
+   DrawZoneBox(config.objectPrefix+"PD_Premium",start,finish,top,premiumBottom,
                SMC_COLOR_BEARISH);
-   DrawZoneBox(config.objectPrefix+"Zone_Equilibrium",start,finish,eqTop,eqBottom,
+   DrawZoneBox(config.objectPrefix+"PD_Equilibrium",start,finish,eqTop,eqBottom,
                SMC_COLOR_EQUILIBRIUM);
-   DrawZoneBox(config.objectPrefix+"Zone_Discount",start,finish,discountTop,bottom,
+   DrawZoneBox(config.objectPrefix+"PD_Discount",start,finish,discountTop,bottom,
                SMC_COLOR_BULLISH);
    datetime middleTime=start+(finish-start)/2;
-   DrawText(config.objectPrefix+"Zone_Premium_Label",middleTime,
-            (top+premiumBottom)/2,"Premium",SMC_COLOR_LABEL,
+   double premiumPrice=SMC_LabelOffsetPrice(config.objectPrefix+"PD_Premium",
+                                           (top+premiumBottom)/2,MathAbs(top-premiumBottom));
+   double equilibriumPrice=SMC_LabelOffsetPrice(config.objectPrefix+"PD_Equilibrium",
+                                               (eqTop+eqBottom)/2,MathAbs(eqTop-eqBottom));
+   double discountPrice=SMC_LabelOffsetPrice(config.objectPrefix+"PD_Discount",
+                                            (discountTop+bottom)/2,MathAbs(discountTop-bottom));
+   DrawText(config.objectPrefix+"PD_Premium_Label",middleTime,
+            premiumPrice,"Premium",SMC_COLOR_LABEL,
             ANCHOR_CENTER);
-   DrawText(config.objectPrefix+"Zone_Equilibrium_Label",middleTime,
-            (eqTop+eqBottom)/2,"Equilibrium",SMC_COLOR_LABEL,
+   DrawText(config.objectPrefix+"PD_Equilibrium_Label",middleTime,
+            equilibriumPrice,"Equilibrium",SMC_COLOR_LABEL,
             ANCHOR_CENTER);
-   DrawText(config.objectPrefix+"Zone_Discount_Label",middleTime,
-            (discountTop+bottom)/2,"Discount",SMC_COLOR_LABEL,
+   DrawText(config.objectPrefix+"PD_Discount_Label",middleTime,
+            discountPrice,"Discount",SMC_COLOR_LABEL,
             ANCHOR_CENTER);
 }
 
@@ -735,23 +889,38 @@ void RenderPreviousLevels(const SMC_DrawConfig &config,const int ratesTotal,
                           const double &high[],const double &low[])
 {
    if(config.showDailyLevels)
-      DrawPreviousPeriodLevels(config,PERIOD_D1,"D",config.dailyLevelsStyle,
+      DrawPreviousPeriodLevels(config,PERIOD_D1,"PL_D",config.dailyLevelsStyle,
                                SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    else
-      DeleteObjectsWithPrefix(config.objectPrefix+"D");
+   {
+      ObjectDelete(0,config.objectPrefix+"PL_DH");
+      ObjectDelete(0,config.objectPrefix+"PL_DL");
+      ObjectDelete(0,config.objectPrefix+"PL_DH_Label");
+      ObjectDelete(0,config.objectPrefix+"PL_DL_Label");
+   }
    if(config.showWeeklyLevels)
-      DrawPreviousPeriodLevels(config,PERIOD_W1,"W",config.weeklyLevelsStyle,
+      DrawPreviousPeriodLevels(config,PERIOD_W1,"PL_W",config.weeklyLevelsStyle,
                                SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    else
-      DeleteObjectsWithPrefix(config.objectPrefix+"W");
+   {
+      ObjectDelete(0,config.objectPrefix+"PL_WH");
+      ObjectDelete(0,config.objectPrefix+"PL_WL");
+      ObjectDelete(0,config.objectPrefix+"PL_WH_Label");
+      ObjectDelete(0,config.objectPrefix+"PL_WL_Label");
+   }
    if(config.showMonthlyLevels)
-      DrawPreviousPeriodLevels(config,PERIOD_MN1,"M",config.monthlyLevelsStyle,
+      DrawPreviousPeriodLevels(config,PERIOD_MN1,"PL_M",config.monthlyLevelsStyle,
                                SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    else
-      DeleteObjectsWithPrefix(config.objectPrefix+"M");
+   {
+      ObjectDelete(0,config.objectPrefix+"PL_MH");
+      ObjectDelete(0,config.objectPrefix+"PL_ML");
+      ObjectDelete(0,config.objectPrefix+"PL_MH_Label");
+      ObjectDelete(0,config.objectPrefix+"PL_ML_Label");
+   }
 }
 
 #endif // SMC_DRAW_MQH

@@ -2,7 +2,6 @@
 // Any redistribution must retain attribution and this license notice.
 #property copyright " Smart Money Concepts"
 #property version   "1.00"
-#property strict
 #property indicator_chart_window
 #include <SMC/SMC_Types.mqh>
 #include <SMC/SMC_Engine.mqh>
@@ -79,7 +78,6 @@ bool PreviousTradeHistoryVisibility = false;
 bool TradeHistoryVisibilityCaptured = false;
 bool TradeHistoryVisibilityChanged = false;
 ENUM_TIMEFRAMES LastChartPeriod = PERIOD_CURRENT;
-bool TimeframeSwitchPending = false;
 
 color BullColor(const bool internal)
 {
@@ -103,35 +101,21 @@ void ConfigureDrawing()
    DrawConfig.internalBearishStructure=InternalBearishStructure;
    DrawConfig.swingBullishStructure=SwingBullishStructure;
    DrawConfig.swingBearishStructure=SwingBearishStructure;
-   DrawConfig.internalBullishColor=SMC_COLOR_BULLISH;
-   DrawConfig.internalBearishColor=SMC_COLOR_BEARISH;
-   DrawConfig.swingBullishColor=SMC_COLOR_BULLISH;
-   DrawConfig.swingBearishColor=SMC_COLOR_BEARISH;
    DrawConfig.showInternalOrderBlocks=ShowInternalOrderBlocks;
    DrawConfig.showSwingOrderBlocks=ShowSwingOrderBlocks;
    DrawConfig.internalOrderBlocksToShow=InternalOrderBlocksToShow;
    DrawConfig.swingOrderBlocksToShow=SwingOrderBlocksToShow;
    DrawConfig.orderBlockExtend=OrderBlockExtend;
-   DrawConfig.internalBullishOBColor=SMC_COLOR_BULLISH;
-   DrawConfig.internalBearishOBColor=SMC_COLOR_BEARISH;
-   DrawConfig.swingBullishOBColor=SMC_COLOR_BULLISH;
-   DrawConfig.swingBearishOBColor=SMC_COLOR_BEARISH;
    DrawConfig.showSwingPoints=ShowSwingPoints;
    DrawConfig.swingLength=SwingLength;
    DrawConfig.showStrongWeakHighLow=ShowStrongWeakHighLow;
    DrawConfig.showPremiumDiscountZones=ShowPremiumDiscountZones;
-   DrawConfig.premiumZoneColor=SMC_COLOR_BEARISH;
-   DrawConfig.equilibriumZoneColor=SMC_COLOR_EQUILIBRIUM;
-   DrawConfig.discountZoneColor=SMC_COLOR_BULLISH;
    DrawConfig.showDailyLevels=ShowDailyLevels;
    DrawConfig.showWeeklyLevels=ShowWeeklyLevels;
    DrawConfig.showMonthlyLevels=ShowMonthlyLevels;
    DrawConfig.dailyLevelsStyle=DailyLevelsStyle;
    DrawConfig.weeklyLevelsStyle=WeeklyLevelsStyle;
    DrawConfig.monthlyLevelsStyle=MonthlyLevelsStyle;
-   DrawConfig.dailyLevelsColor=SMC_COLOR_PREVIOUS_LEVEL;
-   DrawConfig.weeklyLevelsColor=SMC_COLOR_PREVIOUS_LEVEL;
-   DrawConfig.monthlyLevelsColor=SMC_COLOR_PREVIOUS_LEVEL;
 }
 
 #include <SMC/SMC_Draw.mqh>
@@ -381,7 +365,6 @@ int OnInit()
    }
    ConfigureDrawing();
    LastChartPeriod=_Period;
-   TimeframeSwitchPending=false;
    SetIndexBuffer(0,CandleOpen,INDICATOR_DATA);
    SetIndexBuffer(1,CandleHigh,INDICATOR_DATA);
    SetIndexBuffer(2,CandleLow,INDICATOR_DATA);
@@ -413,22 +396,6 @@ void OnDeinit(const int reason)
          PrintFormat("SMC: unable to restore trade-history visibility (error=%d).",
                      GetLastError());
    }
-}
-
-void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
-{
-   if(id!=CHARTEVENT_CHART_CHANGE)
-      return;
-   ENUM_TIMEFRAMES currentPeriod=(ENUM_TIMEFRAMES)ChartPeriod(0);
-   if(currentPeriod==PERIOD_CURRENT || currentPeriod==LastChartPeriod)
-      return;
-   LastChartPeriod=currentPeriod;
-   TimeframeSwitchPending=true;
-   ConfigureDrawing();
-   DeleteSMCObjects(ObjectPrefix);
-   if(!SMC_ResetState(State))
-      Print("SMC: failed to reset state after chart timeframe change.");
-   ChartRedraw(0);
 }
 
 bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &open[],
@@ -516,8 +483,6 @@ void UpdateCurrentBar(const int ratesTotal,const datetime &time[],
    SMC_UpdateCurrentCalculationValues(high[0],low[0],close[1],ratesTotal,
                                       OrderBlockFilter,State);
    UpdateTrailingLevelsOnTick(time[0],high[0],low[0],PeriodSeconds(_Period));
-   DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
-                       State.TrailingAnchorTime,time[0],PeriodSeconds(_Period));
    if(ColorCandles)
    {
       CandleOpen[0]=open[0];
@@ -672,10 +637,9 @@ int OnCalculate(const int rates_total,const int prev_calculated,
    ArraySetAsSeries(high,true);
    ArraySetAsSeries(low,true);
    ArraySetAsSeries(close,true);
-   if(TimeframeSwitchPending || LastChartPeriod!=_Period)
+   if(LastChartPeriod!=_Period)
    {
       LastChartPeriod=_Period;
-      TimeframeSwitchPending=false;
       ConfigureDrawing();
       if(!RebuildHistoricalState(rates_total,time,open,high,low,close))
          return 0;
