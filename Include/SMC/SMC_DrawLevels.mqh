@@ -89,8 +89,8 @@ void SMC_DrawPreviousPeriodLevels(const SMC_DrawConfig &config,
       SMC_MoveObjectPointIfChanged(lowName,0,lowTime,previousLow);
       SMC_MoveObjectPointIfChanged(lowName,1,finish,previousLow);
    }
-   ObjectSetInteger(0,highName,OBJPROP_COLOR,lineColor);
-   ObjectSetInteger(0,lowName,OBJPROP_COLOR,lineColor);
+   ObjectSetInteger(0,highName,OBJPROP_COLOR,SMC_RGBColor(lineColor));
+   ObjectSetInteger(0,lowName,OBJPROP_COLOR,SMC_RGBColor(lineColor));
    ObjectSetInteger(0,highName,OBJPROP_STYLE,SMC_LineStyle(style));
    ObjectSetInteger(0,lowName,OBJPROP_STYLE,SMC_LineStyle(style));
    ObjectSetInteger(0,highName,OBJPROP_RAY_RIGHT,false);
@@ -111,48 +111,60 @@ void SMC_DrawTrailingLevels(const SMC_DrawConfig &config,const PivotState &trail
                         const PivotState &trailingBottom,const int swingBias,
                         const datetime lastTime,const int periodSeconds)
 {
-   if(!config.showStrongWeakHighLow)
-   {
-      ObjectDelete(0,config.objectPrefix+"SW_High");
-      ObjectDelete(0,config.objectPrefix+"SW_Low");
-      ObjectDelete(0,config.objectPrefix+"SW_High_Label");
-      ObjectDelete(0,config.objectPrefix+"SW_Low_Label");
-      return;
-   }
-   if(!trailingTop.initialized || !trailingBottom.initialized) return;
    int seconds=MathMax(1,periodSeconds);
    datetime end=lastTime+seconds*20;
    datetime labelTime=lastTime+seconds*2;
    string hi=config.objectPrefix+"SW_High";
    string lo=config.objectPrefix+"SW_Low";
-   if(ObjectFind(0,hi)<0)
-      ObjectCreate(0,hi,OBJ_TREND,0,trailingTop.time,trailingTop.current,
-                   end,trailingTop.current);
-   else
+   string hiLabel=config.objectPrefix+"SW_High_Label";
+   string loLabel=config.objectPrefix+"SW_Low_Label";
+   bool showHigh=(swingBias<0 ? config.showStrongHigh : config.showWeakHigh);
+   bool showLow=(swingBias>0 ? config.showStrongLow : config.showWeakLow);
+   if(!showHigh)
    {
-      SMC_MoveObjectPointIfChanged(hi,0,trailingTop.time,trailingTop.current);
-      SMC_MoveObjectPointIfChanged(hi,1,end,trailingTop.current);
+      ObjectDelete(0,hi);
+      ObjectDelete(0,hiLabel);
    }
-   if(ObjectFind(0,lo)<0)
-      ObjectCreate(0,lo,OBJ_TREND,0,trailingBottom.time,trailingBottom.current,
-                   end,trailingBottom.current);
-   else
+   if(!showLow)
    {
-      SMC_MoveObjectPointIfChanged(lo,0,trailingBottom.time,trailingBottom.current);
-      SMC_MoveObjectPointIfChanged(lo,1,end,trailingBottom.current);
+      ObjectDelete(0,lo);
+      ObjectDelete(0,loLabel);
    }
-   ObjectSetInteger(0,hi,OBJPROP_COLOR,SMC_COLOR_BEARISH);
-   ObjectSetInteger(0,lo,OBJPROP_COLOR,SMC_COLOR_BULLISH);
-   ObjectSetInteger(0,hi,OBJPROP_RAY_RIGHT,false);
-   ObjectSetInteger(0,lo,OBJPROP_RAY_RIGHT,false);
-   SMC_DrawText(config.objectPrefix+"SW_High_Label",labelTime,trailingTop.current,
-            SMC_TimeframeLabel(config.chartTimeframe)+" "+
-            (swingBias<0 ? "Strong High" : "Weak High"),
-            SMC_COLOR_BEARISH,ANCHOR_LEFT);
-   SMC_DrawText(config.objectPrefix+"SW_Low_Label",labelTime,trailingBottom.current,
-            SMC_TimeframeLabel(config.chartTimeframe)+" "+
-            (swingBias>0 ? "Strong Low" : "Weak Low"),
-            SMC_COLOR_BULLISH,ANCHOR_LEFT);
+   if(!trailingTop.initialized || !trailingBottom.initialized) return;
+   if(showHigh)
+   {
+      if(ObjectFind(0,hi)<0)
+         ObjectCreate(0,hi,OBJ_TREND,0,trailingTop.time,trailingTop.current,
+                      end,trailingTop.current);
+      else
+      {
+         SMC_MoveObjectPointIfChanged(hi,0,trailingTop.time,trailingTop.current);
+         SMC_MoveObjectPointIfChanged(hi,1,end,trailingTop.current);
+      }
+      ObjectSetInteger(0,hi,OBJPROP_COLOR,SMC_RGBColor(SMC_COLOR_BEARISH));
+      ObjectSetInteger(0,hi,OBJPROP_RAY_RIGHT,false);
+      SMC_DrawText(hiLabel,labelTime,trailingTop.current,
+               SMC_TimeframeLabel(config.chartTimeframe)+" "+
+               (swingBias<0 ? "Strong High" : "Weak High"),
+               SMC_COLOR_BEARISH,ANCHOR_LEFT);
+   }
+   if(showLow)
+   {
+      if(ObjectFind(0,lo)<0)
+         ObjectCreate(0,lo,OBJ_TREND,0,trailingBottom.time,trailingBottom.current,
+                      end,trailingBottom.current);
+      else
+      {
+         SMC_MoveObjectPointIfChanged(lo,0,trailingBottom.time,trailingBottom.current);
+         SMC_MoveObjectPointIfChanged(lo,1,end,trailingBottom.current);
+      }
+      ObjectSetInteger(0,lo,OBJPROP_COLOR,SMC_RGBColor(SMC_COLOR_BULLISH));
+      ObjectSetInteger(0,lo,OBJPROP_RAY_RIGHT,false);
+      SMC_DrawText(loLabel,labelTime,trailingBottom.current,
+               SMC_TimeframeLabel(config.chartTimeframe)+" "+
+               (swingBias>0 ? "Strong Low" : "Weak Low"),
+               SMC_COLOR_BULLISH,ANCHOR_LEFT);
+   }
 }
 
 void SMC_DrawUpdateTrailingLevels(const SMC_DrawConfig &config,
@@ -164,40 +176,44 @@ void SMC_DrawUpdateTrailingLevels(const SMC_DrawConfig &config,
                                   const int periodSeconds)
 {
    int seconds=MathMax(1,periodSeconds);
-   if(!config.showStrongWeakHighLow)
+   bool showHigh=(swingBias<0 ? config.showStrongHigh : config.showWeakHigh);
+   bool showLow=(swingBias>0 ? config.showStrongLow : config.showWeakLow);
+   string highLine=config.objectPrefix+"SW_High";
+   string lowLine=config.objectPrefix+"SW_Low";
+   string highLabel=config.objectPrefix+"SW_High_Label";
+   string lowLabel=config.objectPrefix+"SW_Low_Label";
+   if(!showHigh)
    {
-      ObjectDelete(0,config.objectPrefix+"SW_High");
-      ObjectDelete(0,config.objectPrefix+"SW_Low");
-      ObjectDelete(0,config.objectPrefix+"SW_High_Label");
-      ObjectDelete(0,config.objectPrefix+"SW_Low_Label");
+      ObjectDelete(0,highLine);
+      ObjectDelete(0,highLabel);
    }
-   if(config.showStrongWeakHighLow && trailingTop.initialized &&
-      trailingBottom.initialized)
+   if(!showLow)
+   {
+      ObjectDelete(0,lowLine);
+      ObjectDelete(0,lowLabel);
+   }
+   if(trailingTop.initialized && trailingBottom.initialized)
    {
       datetime end=currentTime+seconds*20;
       datetime labelTime=currentTime+seconds*2;
-      string highLine=config.objectPrefix+"SW_High";
-      string lowLine=config.objectPrefix+"SW_Low";
-      string highLabel=config.objectPrefix+"SW_High_Label";
-      string lowLabel=config.objectPrefix+"SW_Low_Label";
-      if(ObjectFind(0,highLine)>=0)
+      if(showHigh && ObjectFind(0,highLine)>=0)
       {
          SMC_MoveObjectPointIfChanged(highLine,0,trailingTop.time,trailingTop.current);
          SMC_MoveObjectPointIfChanged(highLine,1,end,trailingTop.current);
       }
-      if(ObjectFind(0,lowLine)>=0)
+      if(showLow && ObjectFind(0,lowLine)>=0)
       {
          SMC_MoveObjectPointIfChanged(lowLine,0,trailingBottom.time,trailingBottom.current);
          SMC_MoveObjectPointIfChanged(lowLine,1,end,trailingBottom.current);
       }
-      if(ObjectFind(0,highLabel)>=0)
+      if(showHigh && ObjectFind(0,highLabel)>=0)
       {
          SMC_MoveObjectPointIfChanged(highLabel,0,labelTime,trailingTop.current);
          ObjectSetString(0,highLabel,OBJPROP_TEXT,
                          SMC_TimeframeLabel(config.chartTimeframe)+" "+
                          (swingBias<0 ? "Strong High" : "Weak High"));
       }
-      if(ObjectFind(0,lowLabel)>=0)
+      if(showLow && ObjectFind(0,lowLabel)>=0)
       {
          SMC_MoveObjectPointIfChanged(lowLabel,0,labelTime,trailingBottom.current);
          ObjectSetString(0,lowLabel,OBJPROP_TEXT,

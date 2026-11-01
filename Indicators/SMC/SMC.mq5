@@ -41,7 +41,13 @@ input ENUM_SMC_SHOW SwingBearishStructure = SMC_ALL;
 input ENUM_SMC_SIZE SwingLabelSize = SMC_SMALL;
 input bool ShowSwingPoints = false;
 input int SwingLength = SMC_DEFAULT_SWING_LENGTH;
-input bool ShowStrongWeakHighLow = true;
+input bool ShowStrongWeakHighLow = false;
+
+input group "Strong/Weak High-Low Display"
+input bool ShowStrongHigh = true;
+input bool ShowWeakHigh = true;
+input bool ShowStrongLow = true;
+input bool ShowWeakLow = true;
 
 input group "Order Blocks"
 input bool ShowInternalOrderBlocks = true;
@@ -135,8 +141,8 @@ int OnInit()
    ArraySetAsSeries(CandleClose,true);
    ArraySetAsSeries(CandleColorIndex,true);
    PlotIndexSetInteger(0,PLOT_COLOR_INDEXES,2);
-   PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,SMC_COLOR_BULLISH);
-   PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,SMC_COLOR_BEARISH);
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,SMC_RGBColor(SMC_COLOR_BULLISH));
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,SMC_RGBColor(SMC_COLOR_BEARISH));
    PlotIndexSetDouble(0,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    IndicatorSetString(INDICATOR_SHORTNAME,"Smart Money Concepts");
    return INIT_SUCCEEDED;

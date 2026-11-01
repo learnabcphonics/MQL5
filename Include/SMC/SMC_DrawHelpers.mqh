@@ -99,7 +99,7 @@ void SMC_DrawText(const string name,const datetime when,const double price,
    ObjectSetString(0,name,OBJPROP_TEXT,text);
    ObjectSetString(0,name,OBJPROP_FONT,"Arial");
    ObjectSetInteger(0,name,OBJPROP_FONTSIZE,fontSize);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,textColor);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,SMC_RGBColor(textColor));
    ObjectSetInteger(0,name,OBJPROP_ANCHOR,anchor);
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
    ObjectSetInteger(0,name,OBJPROP_ZORDER,100);

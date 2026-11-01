@@ -28,7 +28,10 @@ struct SMC_DrawConfig
    int orderBlockExtend;
    bool showSwingPoints;
    int swingLength;
-   bool showStrongWeakHighLow;
+   bool showStrongHigh;
+   bool showWeakHigh;
+   bool showStrongLow;
+   bool showWeakLow;
    bool showPremiumDiscountZones;
    bool showDailyLevels;
    bool showWeeklyLevels;

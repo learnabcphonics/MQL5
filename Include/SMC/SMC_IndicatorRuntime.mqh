@@ -22,7 +22,10 @@ void ConfigureDrawing()
    DrawConfig.orderBlockExtend=OrderBlockExtend;
    DrawConfig.showSwingPoints=ShowSwingPoints;
    DrawConfig.swingLength=SwingLength;
-   DrawConfig.showStrongWeakHighLow=ShowStrongWeakHighLow;
+   DrawConfig.showStrongHigh=ShowStrongWeakHighLow && ShowStrongHigh;
+   DrawConfig.showWeakHigh=ShowStrongWeakHighLow && ShowWeakHigh;
+   DrawConfig.showStrongLow=ShowStrongWeakHighLow && ShowStrongLow;
+   DrawConfig.showWeakLow=ShowStrongWeakHighLow && ShowWeakLow;
    DrawConfig.showPremiumDiscountZones=ShowPremiumDiscountZones;
    DrawConfig.showDailyLevels=ShowDailyLevels;
    DrawConfig.showWeeklyLevels=ShowWeeklyLevels;

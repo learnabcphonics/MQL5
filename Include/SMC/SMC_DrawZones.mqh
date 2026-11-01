@@ -18,10 +18,11 @@ void SMC_DrawZoneBox(const string name,const datetime startTime,const datetime e
    double zoneBottom=MathMin(top,bottom);
    // Recreate a rectangle if its actual RGB changed. This also migrates chart
    // objects created by older builds that cached an ARGB/black fill.
-   color rgbColor=(color)((uint)zoneColor & 0xFFFFFF);
+   color rgbColor=SMC_RGBColor(zoneColor);
    if(ObjectFind(0,name)>=0)
    {
-      color currentColor=(color)((uint)ObjectGetInteger(0,name,OBJPROP_COLOR)&0xFFFFFF);
+      color currentColor=SMC_RGBColor(
+         (color)ObjectGetInteger(0,name,OBJPROP_COLOR));
       bool fillEnabled=ObjectGetInteger(0,name,OBJPROP_FILL)!=0;
       bool backgroundMode=ObjectGetInteger(0,name,OBJPROP_BACK)!=0;
       if(currentColor!=rgbColor || !fillEnabled || !backgroundMode)
@@ -57,7 +58,7 @@ void SMC_DrawEqualLevelEvent(const SMC_DrawConfig &config,
    if(!ObjectCreate(0,lineName,OBJ_TREND,0,event.firstTime,event.firstPrice,
                     event.secondTime,event.secondPrice))
       return;
-   ObjectSetInteger(0,lineName,OBJPROP_COLOR,lineColor);
+   ObjectSetInteger(0,lineName,OBJPROP_COLOR,SMC_RGBColor(lineColor));
    ObjectSetInteger(0,lineName,OBJPROP_STYLE,STYLE_DOT);
    ObjectSetInteger(0,lineName,OBJPROP_BACK,false);
    ObjectSetInteger(0,lineName,OBJPROP_ZORDER,20);

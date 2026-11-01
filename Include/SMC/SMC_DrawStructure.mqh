@@ -19,9 +19,9 @@ void SMC_UpdateMarketBiasLabel(const SMC_DrawConfig &config,const int swingBias,
    ObjectSetInteger(0,name,OBJPROP_CORNER,CORNER_LEFT_UPPER);
    ObjectSetInteger(0,name,OBJPROP_XDISTANCE,10);
    ObjectSetInteger(0,name,OBJPROP_YDISTANCE,40);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,
+   ObjectSetInteger(0,name,OBJPROP_COLOR,SMC_RGBColor(
                     swingBias>0 ? SMC_COLOR_BULLISH :
-                    (swingBias<0 ? SMC_COLOR_BEARISH : SMC_COLOR_EQUILIBRIUM));
+                    (swingBias<0 ? SMC_COLOR_BEARISH : SMC_COLOR_EQUILIBRIUM)));
    ObjectSetInteger(0,name,OBJPROP_FONTSIZE,10);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
@@ -100,7 +100,8 @@ void SMC_RenderPresentStructures(const SMC_DrawConfig &config,
          SMC_MoveObjectPointIfChanged(lineName,0,pivot.time,pivot.current);
          SMC_MoveObjectPointIfChanged(lineName,1,rightTime,pivot.current);
       }
-      ObjectSetInteger(0,lineName,OBJPROP_COLOR,latestStructures[oldest].lineColor);
+      ObjectSetInteger(0,lineName,OBJPROP_COLOR,
+                       SMC_RGBColor(latestStructures[oldest].lineColor));
       ObjectSetInteger(0,lineName,OBJPROP_STYLE,
                        latestStructures[oldest].internal ? STYLE_DASH : STYLE_SOLID);
       ObjectSetInteger(0,lineName,OBJPROP_WIDTH,1);
