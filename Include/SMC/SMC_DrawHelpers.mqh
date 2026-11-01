@@ -32,17 +32,17 @@ void SMC_DeleteObjectsWithPrefix(const string prefix)
 
 int SMC_ZoneZOrder(const string objectName)
 {
-   if(StringFind(objectName,"PL_")==0)
+   if(StringFind(objectName,"PL_")>=0)
       return -50;
-   if(StringFind(objectName,"PD_")==0)
+   if(StringFind(objectName,"PD_")>=0)
       return -40;
-   if(StringFind(objectName,"FVG_")==0)
+   if(StringFind(objectName,"FVG_")>=0)
       return -30;
-   if(StringFind(objectName,"OB_")==0)
+   if(StringFind(objectName,"OB_")>=0)
       return -20;
-   if(StringFind(objectName,"STR_")==0)
+   if(StringFind(objectName,"STR_")>=0)
       return 0;
-   if(StringFind(objectName,"SW_")==0)
+   if(StringFind(objectName,"SW_")>=0)
       return 0;
    return -10;
 }

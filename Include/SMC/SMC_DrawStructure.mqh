@@ -67,14 +67,28 @@ void SMC_RenderPresentStructures(const SMC_DrawConfig &config,
 {
    if(!presentStructuresDirty)
       return;
-   for(int i=0;i<ArraySize(latestStructures);i++)
+   int count=MathMin(ArraySize(latestStructures),4);
+   bool rendered[4];
+   for(int i=0;i<count;i++)
+      rendered[i]=false;
+   for(int rank=0;rank<count;rank++)
    {
-      if(!latestStructures[i].valid)
-         continue;
-      string lineName=config.objectPrefix+"STR_Line_"+latestStructures[i].id;
-      string labelName=config.objectPrefix+"STR_Label_"+latestStructures[i].id;
-      PivotState pivot=latestStructures[i].pivot;
-      datetime rightTime=latestStructures[i].rightTime;
+      int oldest=-1;
+      for(int i=0;i<count;i++)
+      {
+         if(rendered[i] || !latestStructures[i].valid)
+            continue;
+         if(oldest<0 ||
+            latestStructures[i].pivot.time<latestStructures[oldest].pivot.time)
+            oldest=i;
+      }
+      if(oldest<0)
+         break;
+      rendered[oldest]=true;
+      string lineName=config.objectPrefix+"STR_Line_"+latestStructures[oldest].id;
+      string labelName=config.objectPrefix+"STR_Label_"+latestStructures[oldest].id;
+      PivotState pivot=latestStructures[oldest].pivot;
+      datetime rightTime=latestStructures[oldest].rightTime;
       if(ObjectFind(0,lineName)<0)
       {
          if(!ObjectCreate(0,lineName,OBJ_TREND,0,pivot.time,pivot.current,
@@ -86,19 +100,19 @@ void SMC_RenderPresentStructures(const SMC_DrawConfig &config,
          SMC_MoveObjectPointIfChanged(lineName,0,pivot.time,pivot.current);
          SMC_MoveObjectPointIfChanged(lineName,1,rightTime,pivot.current);
       }
-      ObjectSetInteger(0,lineName,OBJPROP_COLOR,latestStructures[i].lineColor);
+      ObjectSetInteger(0,lineName,OBJPROP_COLOR,latestStructures[oldest].lineColor);
       ObjectSetInteger(0,lineName,OBJPROP_STYLE,
-                       latestStructures[i].internal ? STYLE_DASH : STYLE_SOLID);
+                       latestStructures[oldest].internal ? STYLE_DASH : STYLE_SOLID);
       ObjectSetInteger(0,lineName,OBJPROP_WIDTH,1);
       ObjectSetInteger(0,lineName,OBJPROP_RAY_RIGHT,false);
       ObjectSetInteger(0,lineName,OBJPROP_SELECTABLE,false);
       datetime middle=pivot.time+(rightTime-pivot.time)/2;
       SMC_DrawText(labelName,middle,pivot.current,
-               SMC_TimeframeLabel(config.chartTimeframe)+" "+
-               latestStructures[i].tag,
-               latestStructures[i].lineColor,
-               latestStructures[i].bullish ? ANCHOR_UPPER : ANCHOR_LOWER,
-               (int)latestStructures[i].labelSize);
+                   SMC_TimeframeLabel(config.chartTimeframe)+" "+
+                   latestStructures[oldest].tag,
+                   latestStructures[oldest].lineColor,
+                   latestStructures[oldest].bullish ? ANCHOR_UPPER : ANCHOR_LOWER,
+                   (int)latestStructures[oldest].labelSize);
    }
    presentStructuresDirty=false;
 }

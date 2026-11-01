@@ -365,15 +365,7 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
    SMC_DrawOrderBlockObjects(DrawConfig,State.OrderBlocks,time[0],periodSeconds);
    if(ShowFairValueGaps)
       DrawFVGs();
-   if(ShowDailyLevels)
-      SMC_DrawPreviousPeriodLevels(DrawConfig,PERIOD_D1,"D",DailyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
-                                   time[0],ratesTotal,time,high,low);
-   if(ShowWeeklyLevels)
-      SMC_DrawPreviousPeriodLevels(DrawConfig,PERIOD_W1,"W",WeeklyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
-                                   time[0],ratesTotal,time,high,low);
-   if(ShowMonthlyLevels)
-      SMC_DrawPreviousPeriodLevels(DrawConfig,PERIOD_MN1,"M",MonthlyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
-                                   time[0],ratesTotal,time,high,low);
+   SMC_RenderPreviousLevels(DrawConfig,ratesTotal,time,high,low);
    SMC_DrawTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
                           time[0],periodSeconds);
    SMC_DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,

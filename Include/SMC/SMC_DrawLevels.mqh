@@ -264,16 +264,16 @@ void SMC_RenderPreviousLevels(const SMC_DrawConfig &config,const int ratesTotal,
                           const datetime &time[],
                           const double &high[],const double &low[])
 {
-   if(config.showDailyLevels)
-      SMC_DrawPreviousPeriodLevels(config,PERIOD_D1,"PL_D",config.dailyLevelsStyle,
+   if(config.showMonthlyLevels)
+      SMC_DrawPreviousPeriodLevels(config,PERIOD_MN1,"PL_M",config.monthlyLevelsStyle,
                                SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    else
    {
-      ObjectDelete(0,config.objectPrefix+"PL_DH");
-      ObjectDelete(0,config.objectPrefix+"PL_DL");
-      ObjectDelete(0,config.objectPrefix+"PL_DH_Label");
-      ObjectDelete(0,config.objectPrefix+"PL_DL_Label");
+      ObjectDelete(0,config.objectPrefix+"PL_MH");
+      ObjectDelete(0,config.objectPrefix+"PL_ML");
+      ObjectDelete(0,config.objectPrefix+"PL_MH_Label");
+      ObjectDelete(0,config.objectPrefix+"PL_ML_Label");
    }
    if(config.showWeeklyLevels)
       SMC_DrawPreviousPeriodLevels(config,PERIOD_W1,"PL_W",config.weeklyLevelsStyle,
@@ -286,16 +286,16 @@ void SMC_RenderPreviousLevels(const SMC_DrawConfig &config,const int ratesTotal,
       ObjectDelete(0,config.objectPrefix+"PL_WH_Label");
       ObjectDelete(0,config.objectPrefix+"PL_WL_Label");
    }
-   if(config.showMonthlyLevels)
-      SMC_DrawPreviousPeriodLevels(config,PERIOD_MN1,"PL_M",config.monthlyLevelsStyle,
+   if(config.showDailyLevels)
+      SMC_DrawPreviousPeriodLevels(config,PERIOD_D1,"PL_D",config.dailyLevelsStyle,
                                SMC_COLOR_PREVIOUS_LEVEL,
                                time[0],ratesTotal,time,high,low);
    else
    {
-      ObjectDelete(0,config.objectPrefix+"PL_MH");
-      ObjectDelete(0,config.objectPrefix+"PL_ML");
-      ObjectDelete(0,config.objectPrefix+"PL_MH_Label");
-      ObjectDelete(0,config.objectPrefix+"PL_ML_Label");
+      ObjectDelete(0,config.objectPrefix+"PL_DH");
+      ObjectDelete(0,config.objectPrefix+"PL_DL");
+      ObjectDelete(0,config.objectPrefix+"PL_DH_Label");
+      ObjectDelete(0,config.objectPrefix+"PL_DL_Label");
    }
 }
 

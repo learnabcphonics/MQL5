@@ -124,14 +124,22 @@ void DrawActiveFairValueGaps(const MqlRates &bars[])
    if(periodSeconds<=0)
       periodSeconds=60;
    datetime right=bars[0].time+FairValueGapExtend*periodSeconds;
-   for(int i=0;i<gapCount;i++)
+   SMC_DeleteObjectsWithPrefix(DrawConfig.objectPrefix+"FVG_");
+   for(int rank=0;rank<displayCount;rank++)
    {
-      FairValueGapState gap=State.FairValueGaps[i];
-      if(!selected[i])
+      int oldest=-1;
+      for(int i=0;i<gapCount;i++)
       {
-         SMC_DeleteFairValueGap(DrawConfig,gap);
-         continue;
+         if(!selected[i])
+            continue;
+         if(oldest<0 ||
+            State.FairValueGaps[i].time<State.FairValueGaps[oldest].time)
+            oldest=i;
       }
+      if(oldest<0)
+         break;
+      selected[oldest]=false;
+      FairValueGapState gap=State.FairValueGaps[oldest];
       gap.right=right;
       color gapColor=(gap.bias>0 ? SMC_COLOR_BULLISH : SMC_COLOR_BEARISH);
       SMC_DrawFairValueGap(DrawConfig,gap,gapColor);

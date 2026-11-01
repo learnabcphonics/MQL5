@@ -59,6 +59,10 @@ void SMC_DrawEqualLevelEvent(const SMC_DrawConfig &config,
       return;
    ObjectSetInteger(0,lineName,OBJPROP_COLOR,lineColor);
    ObjectSetInteger(0,lineName,OBJPROP_STYLE,STYLE_DOT);
+   ObjectSetInteger(0,lineName,OBJPROP_BACK,false);
+   ObjectSetInteger(0,lineName,OBJPROP_ZORDER,20);
+   ObjectSetInteger(0,lineName,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,lineName,OBJPROP_HIDDEN,true);
    SMC_DrawText(config.objectPrefix+kind+"_Label_"+id,event.labelTime,
             event.secondPrice,SMC_TimeframeLabel(config.chartTimeframe)+" "+kind,
             lineColor,event.high ? ANCHOR_LOWER : ANCHOR_UPPER,(int)labelSize);
@@ -133,16 +137,6 @@ string SMC_OrderBlockObjectName(const SMC_DrawConfig &config,
           IntegerToString(block.bias);
 }
 
-bool SMC_OrderBlocksOverlap(const OrderBlockState &first,const datetime firstRight,
-                            const OrderBlockState &second,const datetime secondRight)
-{
-   if(first.time>secondRight || second.time>firstRight)
-      return false;
-   if(first.internal!=second.internal || first.bias!=second.bias)
-      return false;
-   return first.high>=second.low && second.high>=first.low;
-}
-
 color SMC_OrderBlockBaseColor(const OrderBlockState &block)
 {
    return block.bias<0 ? SMC_COLOR_BEARISH : SMC_COLOR_BULLISH;
@@ -202,17 +196,22 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
                            const OrderBlockState &orderBlocks[],
                            const datetime lastTime,const int periodSeconds)
 {
-   for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
-   {
-      string existingName=ObjectName(0,i,-1,-1);
-      if(StringFind(existingName,config.objectPrefix+"OB_")==0 &&
-         StringFind(existingName,"_Origin")>=0)
-         ObjectDelete(0,existingName);
-   }
-   int internalCount=0,swingCount=0;
+   int totalInternal=0,totalSwing=0;
    int labelX[40],labelY[40],labelHalfWidths[40];
    int placedLabelCount=0;
    int count=ArraySize(orderBlocks);
+   for(int i=0;i<count;i++)
+   {
+      if(orderBlocks[i].internal)
+         totalInternal++;
+      else
+         totalSwing++;
+   }
+   int internalToSkip=MathMax(0,totalInternal-
+                             MathMax(0,config.internalOrderBlocksToShow));
+   int swingToSkip=MathMax(0,totalSwing-
+                           MathMax(0,config.swingOrderBlocksToShow));
+   int internalSeen=0,swingSeen=0;
    datetime blockRight[];
    if(ArrayResize(blockRight,count)!=count)
       return;
@@ -227,63 +226,35 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
       if(blockRight[i]<=orderBlocks[i].time)
          blockRight[i]=orderBlocks[i].time+safePeriodSecondsForCache;
    }
-   for(int i=count-1;i>=0;i--)
+   for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
+   {
+      string existingName=ObjectName(0,i,-1,-1);
+      if(StringFind(existingName,config.objectPrefix+"OB_")==0)
+         ObjectDelete(0,existingName);
+   }
+   for(int i=0;i<count;i++)
    {
       OrderBlockState block=orderBlocks[i];
-      int limit=block.internal ? config.internalOrderBlocksToShow :
-                                 config.swingOrderBlocksToShow;
       string objectName=SMC_OrderBlockObjectName(config,block);
-      bool visible=true;
+      bool visible;
       if(block.internal)
       {
-         visible=config.showInternalOrderBlocks && internalCount<limit;
-         if(visible) internalCount++;
+         visible=config.showInternalOrderBlocks &&
+                 internalSeen>=internalToSkip;
+         internalSeen++;
       }
       else
       {
-         visible=config.showSwingOrderBlocks && swingCount<limit;
-         if(visible) swingCount++;
+         visible=config.showSwingOrderBlocks && swingSeen>=swingToSkip;
+         swingSeen++;
       }
       if(!visible)
-      {
-         ObjectDelete(0,objectName);
-         ObjectDelete(0,objectName+"_Label");
-         ObjectDelete(0,objectName+"_Origin");
          continue;
-      }
-
-      bool hiddenByOverlap=false;
-      for(int j=0;j<i;j++)
-      {
-         if(!SMC_OrderBlocksOverlap(block,blockRight[i],
-                                   orderBlocks[j],blockRight[j]))
-            continue;
-         hiddenByOverlap=true;
-         break;
-      }
-      if(hiddenByOverlap)
-      {
-         ObjectDelete(0,objectName);
-         ObjectDelete(0,objectName+"_Label");
-         ObjectDelete(0,objectName+"_Origin");
-         continue;
-      }
 
       color base=SMC_OrderBlockBaseColor(block);
       datetime rightTime=blockRight[i];
-      color drawColor=base;
-      for(int j=0;j<i;j++)
-      {
-         if(SMC_OrderBlocksOverlap(block,rightTime,
-                                   orderBlocks[j],blockRight[j]))
-         {
-            drawColor=SMC_OrderBlockBaseColor(orderBlocks[j]);
-            break;
-         }
-      }
-
       SMC_DrawZoneBox(objectName,block.time,
-                  rightTime,block.high,block.low,drawColor);
+                  rightTime,block.high,block.low,base);
       if(ObjectFind(0,objectName)<0)
          continue;
       ObjectDelete(0,objectName+"_Origin");
