@@ -11,8 +11,9 @@ void SMC_DrawFairValueGap(const SMC_DrawConfig &config,const FairValueGapState &
 {
    string id=(gap.bias>0 ? "Bull_" : "Bear_")+
              IntegerToString((int)gap.time);
-   string firstName=config.objectPrefix+"FVG_"+id+"_1";
-   string secondName=config.objectPrefix+"FVG_"+id+"_2";
+   string zoneName=config.objectPrefix+"FVG_"+id;
+   string firstName=zoneName+"_1";
+   string secondName=zoneName+"_2";
    bool hasOverlap=false;
    for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
    {
@@ -36,15 +37,16 @@ void SMC_DrawFairValueGap(const SMC_DrawConfig &config,const FairValueGapState &
    }
    if(hasOverlap)
    {
+      SMC_PineDrawingDelete(zoneName);
       SMC_PineDrawingDelete(firstName);
       SMC_PineDrawingDelete(secondName);
       SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_Label");
       return;
    }
-   SMC_DrawZoneBox(firstName,gap.left,gap.right,
-               gap.firstTop,gap.firstBottom,zoneColor,70,70,false);
-   SMC_DrawZoneBox(secondName,gap.left,gap.right,
-               gap.secondTop,gap.secondBottom,zoneColor,70,70,false);
+   SMC_PineDrawingDelete(firstName);
+   SMC_PineDrawingDelete(secondName);
+   SMC_DrawZoneBox(zoneName,gap.left,gap.right,
+                   gap.top,gap.bottom,zoneColor,70,70,false);
    datetime middleTime=gap.left+(gap.right-gap.left)/2;
    double middlePrice=(gap.top+gap.bottom)*0.5;
    double labelPrice=SMC_LabelOffsetPrice(config.objectPrefix+"FVG_"+id,
@@ -60,6 +62,7 @@ void SMC_DeleteFairValueGap(const SMC_DrawConfig &config,
 {
    string id=(gap.bias>0 ? "Bull_" : "Bear_")+
              IntegerToString((int)gap.time);
+   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id);
    SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_1");
    SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_2");
    SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_Label");
