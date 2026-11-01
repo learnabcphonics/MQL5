@@ -4,70 +4,7 @@
 #define SMC_DRAWZONES_MQH
 
 #include <SMC/SMC_DrawHelpers.mqh>
-
-void SMC_DrawZoneBox(const string name,const datetime startTime,const datetime endTime,
-                 const double top,const double bottom,const color zoneColor)
-{
-   if(startTime<=0 || endTime<=startTime ||
-      !MathIsValidNumber(top) || !MathIsValidNumber(bottom) || top==bottom)
-   {
-      ObjectDelete(0,name);
-      return;
-   }
-   double zoneTop=MathMax(top,bottom);
-   double zoneBottom=MathMin(top,bottom);
-   // Recreate a rectangle if its actual RGB changed. This also migrates chart
-   // objects created by older builds that cached an ARGB/black fill.
-   color rgbColor=SMC_RGBColor(zoneColor);
-   if(ObjectFind(0,name)>=0)
-   {
-      color currentColor=SMC_RGBColor(
-         (color)ObjectGetInteger(0,name,OBJPROP_COLOR));
-      bool fillEnabled=ObjectGetInteger(0,name,OBJPROP_FILL)!=0;
-      bool backgroundMode=ObjectGetInteger(0,name,OBJPROP_BACK)!=0;
-      if(currentColor!=rgbColor || !fillEnabled || !backgroundMode)
-         ObjectDelete(0,name);
-   }
-   if(ObjectFind(0,name)<0 &&
-      !ObjectCreate(0,name,OBJ_RECTANGLE,0,startTime,zoneTop,endTime,zoneBottom))
-      return;
-   SMC_MoveObjectPointIfChanged(name,0,startTime,zoneTop);
-   SMC_MoveObjectPointIfChanged(name,1,endTime,zoneBottom);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,rgbColor);
-   ObjectSetInteger(0,name,OBJPROP_FILL,true);
-   ObjectSetInteger(0,name,OBJPROP_BACK,true);
-   ObjectSetInteger(0,name,OBJPROP_ZORDER,SMC_ZoneZOrder(name));
-   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
-   ObjectSetInteger(0,name,OBJPROP_SELECTED,false);
-   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
-   ObjectSetString(0,name,OBJPROP_TOOLTIP,"\n");
-}
-
-void SMC_DrawEqualLevelEvent(const SMC_DrawConfig &config,
-                         const EqualLevelEvent &event,
-                         const color lineColor,const ENUM_SMC_SIZE labelSize)
-{
-   if(!event.valid)
-      return;
-   string kind=(event.high ? "EQH" : "EQL");
-   string id=IntegerToString((int)event.secondTime);
-   string lineName=config.objectPrefix+kind+"_Line_"+id;
-   string labelName=config.objectPrefix+kind+"_Label_"+id;
-   ObjectDelete(0,lineName);
-   ObjectDelete(0,labelName);
-   if(!ObjectCreate(0,lineName,OBJ_TREND,0,event.firstTime,event.firstPrice,
-                    event.secondTime,event.secondPrice))
-      return;
-   ObjectSetInteger(0,lineName,OBJPROP_COLOR,SMC_RGBColor(lineColor));
-   ObjectSetInteger(0,lineName,OBJPROP_STYLE,STYLE_DOT);
-   ObjectSetInteger(0,lineName,OBJPROP_BACK,false);
-   ObjectSetInteger(0,lineName,OBJPROP_ZORDER,20);
-   ObjectSetInteger(0,lineName,OBJPROP_SELECTABLE,false);
-   ObjectSetInteger(0,lineName,OBJPROP_HIDDEN,true);
-   SMC_DrawText(config.objectPrefix+kind+"_Label_"+id,event.labelTime,
-            event.secondPrice,SMC_TimeframeLabel(config.chartTimeframe)+" "+kind,
-            lineColor,event.high ? ANCHOR_LOWER : ANCHOR_UPPER,(int)labelSize);
-}
+#include <SMC/SMC_DrawAreas.mqh>
 
 void SMC_DrawFairValueGap(const SMC_DrawConfig &config,const FairValueGapState &gap,
                       const color zoneColor)
@@ -99,15 +36,15 @@ void SMC_DrawFairValueGap(const SMC_DrawConfig &config,const FairValueGapState &
    }
    if(hasOverlap)
    {
-      ObjectDelete(0,firstName);
-      ObjectDelete(0,secondName);
-      ObjectDelete(0,config.objectPrefix+"FVG_"+id+"_Label");
+      SMC_PineDrawingDelete(firstName);
+      SMC_PineDrawingDelete(secondName);
+      SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_Label");
       return;
    }
    SMC_DrawZoneBox(firstName,gap.left,gap.right,
-               gap.firstTop,gap.firstBottom,zoneColor);
+               gap.firstTop,gap.firstBottom,zoneColor,70,70,false);
    SMC_DrawZoneBox(secondName,gap.left,gap.right,
-               gap.secondTop,gap.secondBottom,zoneColor);
+               gap.secondTop,gap.secondBottom,zoneColor,70,70,false);
    datetime middleTime=gap.left+(gap.right-gap.left)/2;
    double middlePrice=(gap.top+gap.bottom)*0.5;
    double labelPrice=SMC_LabelOffsetPrice(config.objectPrefix+"FVG_"+id,
@@ -123,9 +60,9 @@ void SMC_DeleteFairValueGap(const SMC_DrawConfig &config,
 {
    string id=(gap.bias>0 ? "Bull_" : "Bear_")+
              IntegerToString((int)gap.time);
-   ObjectDelete(0,config.objectPrefix+"FVG_"+id+"_1");
-   ObjectDelete(0,config.objectPrefix+"FVG_"+id+"_2");
-   ObjectDelete(0,config.objectPrefix+"FVG_"+id+"_Label");
+   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_1");
+   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_2");
+   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_Label");
 }
 
 string SMC_OrderBlockObjectName(const SMC_DrawConfig &config,
@@ -140,7 +77,11 @@ string SMC_OrderBlockObjectName(const SMC_DrawConfig &config,
 
 color SMC_OrderBlockBaseColor(const OrderBlockState &block)
 {
-   return block.bias<0 ? SMC_COLOR_BEARISH : SMC_COLOR_BULLISH;
+   if(block.internal)
+      return block.bias<0 ? SMC_COLOR_INTERNAL_BEARISH_OB :
+                            SMC_COLOR_INTERNAL_BULLISH_OB;
+   return block.bias<0 ? SMC_COLOR_SWING_BEARISH_OB :
+                         SMC_COLOR_SWING_BULLISH_OB;
 }
 
 bool SMC_FindOrderBlockLabelPosition(const datetime baseTime,
@@ -212,7 +153,6 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
                              MathMax(0,config.internalOrderBlocksToShow));
    int swingToSkip=MathMax(0,totalSwing-
                            MathMax(0,config.swingOrderBlocksToShow));
-   int internalSeen=0,swingSeen=0;
    datetime blockRight[];
    if(ArrayResize(blockRight,count)!=count)
       return;
@@ -231,64 +171,73 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
    {
       string existingName=ObjectName(0,i,-1,-1);
       if(StringFind(existingName,config.objectPrefix+"OB_")==0)
-         ObjectDelete(0,existingName);
+         SMC_PineDrawingDelete(existingName);
    }
-   for(int i=0;i<count;i++)
+   // Draw swing zones first so internal child zones remain visible on top.
+   for(int drawPass=0;drawPass<2;drawPass++)
    {
-      OrderBlockState block=orderBlocks[i];
-      string objectName=SMC_OrderBlockObjectName(config,block);
-      bool visible;
-      if(block.internal)
+      bool drawInternal=(drawPass==1);
+      int internalSeen=0,swingSeen=0;
+      for(int i=0;i<count;i++)
       {
-         visible=config.showInternalOrderBlocks &&
-                 internalSeen>=internalToSkip;
-         internalSeen++;
-      }
-      else
-      {
-         visible=config.showSwingOrderBlocks && swingSeen>=swingToSkip;
-         swingSeen++;
-      }
-      if(!visible)
-         continue;
+         OrderBlockState block=orderBlocks[i];
+         if(block.internal!=drawInternal)
+            continue;
+         bool visible;
+         if(block.internal)
+         {
+            visible=config.showInternalOrderBlocks &&
+                    internalSeen>=internalToSkip;
+            internalSeen++;
+         }
+         else
+         {
+            visible=config.showSwingOrderBlocks &&
+                    swingSeen>=swingToSkip;
+            swingSeen++;
+         }
+         if(!visible)
+            continue;
 
-      color base=SMC_OrderBlockBaseColor(block);
-      datetime rightTime=blockRight[i];
-      SMC_DrawZoneBox(objectName,block.time,
-                  rightTime,block.high,block.low,base);
-      if(ObjectFind(0,objectName)<0)
-         continue;
-      ObjectDelete(0,objectName+"_Origin");
-      ArrayResize(keepNames,ArraySize(keepNames)+1);
-      keepNames[ArraySize(keepNames)-1]=objectName;
-      ArrayResize(keepNames,ArraySize(keepNames)+1);
-      keepNames[ArraySize(keepNames)-1]=objectName+"_Label";
-      ArrayResize(keepNames,ArraySize(keepNames)+1);
-      keepNames[ArraySize(keepNames)-1]=objectName+"_Origin";
-      datetime labelTime=block.time+(rightTime-block.time)/2;
-      string label=SMC_TimeframeLabel(config.chartTimeframe)+" "+
-                   (block.internal ? "Int " : "Swing ")+ 
-                   (block.bias>0 ? "Bull OB" : "Bear OB");
-      double labelPrice=(block.high+block.low)*0.5;
-      labelPrice=SMC_LabelOffsetPrice(objectName,labelPrice,
-                                     MathAbs(block.high-block.low));
-      int placedX=0,placedY=0,halfWidth=0;
-      datetime adjustedTime=labelTime;
-      double adjustedPrice=labelPrice;
-      if(placedLabelCount<ArraySize(labelX) &&
-         SMC_FindOrderBlockLabelPosition(labelTime,labelPrice,label,labelX,
-                                         labelY,labelHalfWidths,
-                                         placedLabelCount,adjustedTime,
-                                         adjustedPrice,placedX,placedY,
-                                         halfWidth))
-      {
-         labelX[placedLabelCount]=placedX;
-         labelY[placedLabelCount]=placedY;
-         labelHalfWidths[placedLabelCount]=halfWidth;
-         placedLabelCount++;
+         string objectName=SMC_OrderBlockObjectName(config,block);
+         color base=SMC_OrderBlockBaseColor(block);
+         datetime rightTime=blockRight[i];
+         SMC_DrawZoneBox(objectName,block.time,rightTime,block.high,
+                         block.low,base,80,block.internal ? 100 : 80,true);
+         if(ObjectFind(0,objectName)<0)
+            continue;
+         ObjectDelete(0,objectName+"_Origin");
+         ArrayResize(keepNames,ArraySize(keepNames)+1);
+         keepNames[ArraySize(keepNames)-1]=objectName;
+         ArrayResize(keepNames,ArraySize(keepNames)+1);
+         keepNames[ArraySize(keepNames)-1]=objectName+"_Label";
+         ArrayResize(keepNames,ArraySize(keepNames)+1);
+         keepNames[ArraySize(keepNames)-1]=objectName+"_Origin";
+         datetime labelTime=block.time+(rightTime-block.time)/2;
+         string label=SMC_TimeframeLabel(config.chartTimeframe)+" "+
+                      (block.internal ? "Int " : "Swing ")+
+                      (block.bias>0 ? "Bull OB" : "Bear OB");
+         double labelPrice=(block.high+block.low)*0.5;
+         labelPrice=SMC_LabelOffsetPrice(objectName,labelPrice,
+                                        MathAbs(block.high-block.low));
+         int placedX=0,placedY=0,halfWidth=0;
+         datetime adjustedTime=labelTime;
+         double adjustedPrice=labelPrice;
+         if(placedLabelCount<ArraySize(labelX) &&
+            SMC_FindOrderBlockLabelPosition(labelTime,labelPrice,label,labelX,
+                                            labelY,labelHalfWidths,
+                                            placedLabelCount,adjustedTime,
+                                            adjustedPrice,placedX,placedY,
+                                            halfWidth))
+         {
+            labelX[placedLabelCount]=placedX;
+            labelY[placedLabelCount]=placedY;
+            labelHalfWidths[placedLabelCount]=halfWidth;
+            placedLabelCount++;
+         }
+         SMC_DrawText(objectName+"_Label",adjustedTime,adjustedPrice,
+                  label,SMC_COLOR_LABEL,ANCHOR_CENTER,8,true);
       }
-      SMC_DrawText(objectName+"_Label",adjustedTime,adjustedPrice,
-               label,SMC_COLOR_LABEL,ANCHOR_CENTER);
    }
    for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
    {
@@ -305,7 +254,7 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
             }
          }
          if(!keep)
-            ObjectDelete(0,existingName);
+            SMC_PineDrawingDelete(existingName);
       }
    }
 }

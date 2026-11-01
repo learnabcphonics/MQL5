@@ -5,6 +5,7 @@
 
 enum ENUM_SMC_FILTER { SMC_ATR, SMC_CUMULATIVE_RANGE };
 enum ENUM_SMC_MITIGATION { SMC_CLOSE, SMC_HIGH_LOW };
+enum ENUM_SMC_MODE { SMC_HISTORICAL, SMC_PRESENT };
 enum ENUM_SMC_SHOW { SMC_ALL, SMC_BOS, SMC_CHOCH };
 enum ENUM_SMC_LINE_STYLE { SMC_SOLID, SMC_DASHED, SMC_DOTTED };
 enum ENUM_SMC_SIZE { SMC_TINY=8, SMC_SMALL=10, SMC_NORMAL=12 };
@@ -14,6 +15,7 @@ struct SMC_DrawConfig
    string objectPrefix;
    string symbol;
    ENUM_TIMEFRAMES chartTimeframe;
+   ENUM_SMC_MODE mode;
    bool showMarketBias;
    bool showInternalStructure;
    bool showSwingStructure;
@@ -62,6 +64,16 @@ struct StructureDisplayState
    bool internal;
    bool bullish;
    ENUM_SMC_SIZE labelSize;
+   bool valid;
+};
+
+struct SMC_HigherBiasState
+{
+   ENUM_TIMEFRAMES timeframe;
+   datetime lastClosedBar;
+   datetime lastAttemptChartBar;
+   int swingBias;
+   int internalBias;
    bool valid;
 };
 

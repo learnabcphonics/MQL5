@@ -4,7 +4,7 @@
 #define SMC_DRAWLEVELS_MQH
 
 #include <SMC/SMC_DrawHelpers.mqh>
-#include <SMC/SMC_DrawZones.mqh>
+#include <SMC/SMC_DrawAreas.mqh>
 
 void SMC_DrawSwingLabels(const SMC_DrawConfig &config,const datetime &time[],
                      const double &high[],const double &low[],
@@ -21,12 +21,18 @@ void SMC_DrawSwingLabels(const SMC_DrawConfig &config,const datetime &time[],
    bool drawHigh=(swingHigh.initialized && swingHigh.index==candidate);
    bool drawLow=(swingLow.initialized && swingLow.index==candidate);
    if(drawHigh)
-      SMC_DrawText(config.objectPrefix+"SW_High_"+IntegerToString((int)time[candidate]),time[candidate],
+      SMC_DrawText(config.objectPrefix+"SW_High_"+
+                   (config.mode==SMC_HISTORICAL ?
+                    IntegerToString((int)time[candidate]) : "Current"),
+               time[candidate],
                high[candidate],(!swingHigh.previousInitialized ? "H" :
-                                swingHigh.current>swingHigh.previous ? "HH" : "LH"),
+                                 swingHigh.current>swingHigh.previous ? "HH" : "LH"),
                SMC_COLOR_BEARISH,ANCHOR_LOWER);
    if(drawLow)
-      SMC_DrawText(config.objectPrefix+"SW_Low_"+IntegerToString((int)time[candidate]),time[candidate],
+      SMC_DrawText(config.objectPrefix+"SW_Low_"+
+                   (config.mode==SMC_HISTORICAL ?
+                    IntegerToString((int)time[candidate]) : "Current"),
+               time[candidate],
                low[candidate],(!swingLow.previousInitialized ? "L" :
                                 swingLow.current<swingLow.previous ? "LL" : "HL"),
                SMC_COLOR_BULLISH,ANCHOR_UPPER);
@@ -75,26 +81,10 @@ void SMC_DrawPreviousPeriodLevels(const SMC_DrawConfig &config,
    datetime labelTime=lastTime+chartPeriodSeconds*2;
    string highName=config.objectPrefix+label+"H";
    string lowName=config.objectPrefix+label+"L";
-   if(ObjectFind(0,highName)<0)
-      ObjectCreate(0,highName,OBJ_TREND,0,highTime,previousHigh,finish,previousHigh);
-   else
-   {
-      SMC_MoveObjectPointIfChanged(highName,0,highTime,previousHigh);
-      SMC_MoveObjectPointIfChanged(highName,1,finish,previousHigh);
-   }
-   if(ObjectFind(0,lowName)<0)
-      ObjectCreate(0,lowName,OBJ_TREND,0,lowTime,previousLow,finish,previousLow);
-   else
-   {
-      SMC_MoveObjectPointIfChanged(lowName,0,lowTime,previousLow);
-      SMC_MoveObjectPointIfChanged(lowName,1,finish,previousLow);
-   }
-   ObjectSetInteger(0,highName,OBJPROP_COLOR,SMC_RGBColor(lineColor));
-   ObjectSetInteger(0,lowName,OBJPROP_COLOR,SMC_RGBColor(lineColor));
-   ObjectSetInteger(0,highName,OBJPROP_STYLE,SMC_LineStyle(style));
-   ObjectSetInteger(0,lowName,OBJPROP_STYLE,SMC_LineStyle(style));
-   ObjectSetInteger(0,highName,OBJPROP_RAY_RIGHT,false);
-   ObjectSetInteger(0,lowName,OBJPROP_RAY_RIGHT,false);
+   SMC_PineLineSet(highName,highTime,previousHigh,finish,previousHigh,
+                   lineColor,SMC_LineStyle(style),1,false,false,true,10);
+   SMC_PineLineSet(lowName,lowTime,previousLow,finish,previousLow,
+                   lineColor,SMC_LineStyle(style),1,false,false,true,10);
    string highLabel=(label=="PL_D" ? "Previous Daily High (PDH)" :
                      label=="PL_W" ? "Previous Weekly High (PWH)" :
                                       "Previous Monthly High (PMH)");
@@ -102,9 +92,9 @@ void SMC_DrawPreviousPeriodLevels(const SMC_DrawConfig &config,
                     label=="PL_W" ? "Previous Weekly Low (PWL)" :
                                      "Previous Monthly Low (PML)");
    SMC_DrawText(config.objectPrefix+label+"H_Label",labelTime,previousHigh,
-            highLabel,lineColor,ANCHOR_LEFT);
+            highLabel,lineColor,ANCHOR_LEFT,8,true);
    SMC_DrawText(config.objectPrefix+label+"L_Label",labelTime,previousLow,
-            lowLabel,lineColor,ANCHOR_LEFT);
+            lowLabel,lineColor,ANCHOR_LEFT,8,true);
 }
 
 void SMC_DrawTrailingLevels(const SMC_DrawConfig &config,const PivotState &trailingTop,
@@ -122,48 +112,34 @@ void SMC_DrawTrailingLevels(const SMC_DrawConfig &config,const PivotState &trail
    bool showLow=(swingBias>0 ? config.showStrongLow : config.showWeakLow);
    if(!showHigh)
    {
-      ObjectDelete(0,hi);
-      ObjectDelete(0,hiLabel);
+      SMC_PineDrawingDelete(hi);
+      SMC_PineDrawingDelete(hiLabel);
    }
    if(!showLow)
    {
-      ObjectDelete(0,lo);
-      ObjectDelete(0,loLabel);
+      SMC_PineDrawingDelete(lo);
+      SMC_PineDrawingDelete(loLabel);
    }
    if(!trailingTop.initialized || !trailingBottom.initialized) return;
    if(showHigh)
    {
-      if(ObjectFind(0,hi)<0)
-         ObjectCreate(0,hi,OBJ_TREND,0,trailingTop.time,trailingTop.current,
-                      end,trailingTop.current);
-      else
-      {
-         SMC_MoveObjectPointIfChanged(hi,0,trailingTop.time,trailingTop.current);
-         SMC_MoveObjectPointIfChanged(hi,1,end,trailingTop.current);
-      }
-      ObjectSetInteger(0,hi,OBJPROP_COLOR,SMC_RGBColor(SMC_COLOR_BEARISH));
-      ObjectSetInteger(0,hi,OBJPROP_RAY_RIGHT,false);
+      SMC_PineLineSet(hi,trailingTop.time,trailingTop.current,end,
+                      trailingTop.current,SMC_COLOR_BEARISH,
+                      STYLE_SOLID,1,false,false,true,10);
       SMC_DrawText(hiLabel,labelTime,trailingTop.current,
                SMC_TimeframeLabel(config.chartTimeframe)+" "+
                (swingBias<0 ? "Strong High" : "Weak High"),
-               SMC_COLOR_BEARISH,ANCHOR_LEFT);
+               SMC_COLOR_BEARISH,ANCHOR_LEFT,8,true);
    }
    if(showLow)
    {
-      if(ObjectFind(0,lo)<0)
-         ObjectCreate(0,lo,OBJ_TREND,0,trailingBottom.time,trailingBottom.current,
-                      end,trailingBottom.current);
-      else
-      {
-         SMC_MoveObjectPointIfChanged(lo,0,trailingBottom.time,trailingBottom.current);
-         SMC_MoveObjectPointIfChanged(lo,1,end,trailingBottom.current);
-      }
-      ObjectSetInteger(0,lo,OBJPROP_COLOR,SMC_RGBColor(SMC_COLOR_BULLISH));
-      ObjectSetInteger(0,lo,OBJPROP_RAY_RIGHT,false);
+      SMC_PineLineSet(lo,trailingBottom.time,trailingBottom.current,end,
+                      trailingBottom.current,SMC_COLOR_BULLISH,
+                      STYLE_SOLID,1,false,false,true,10);
       SMC_DrawText(loLabel,labelTime,trailingBottom.current,
                SMC_TimeframeLabel(config.chartTimeframe)+" "+
                (swingBias>0 ? "Strong Low" : "Weak Low"),
-               SMC_COLOR_BULLISH,ANCHOR_LEFT);
+               SMC_COLOR_BULLISH,ANCHOR_LEFT,8,true);
    }
 }
 
@@ -184,41 +160,37 @@ void SMC_DrawUpdateTrailingLevels(const SMC_DrawConfig &config,
    string lowLabel=config.objectPrefix+"SW_Low_Label";
    if(!showHigh)
    {
-      ObjectDelete(0,highLine);
-      ObjectDelete(0,highLabel);
+      SMC_PineDrawingDelete(highLine);
+      SMC_PineDrawingDelete(highLabel);
    }
    if(!showLow)
    {
-      ObjectDelete(0,lowLine);
-      ObjectDelete(0,lowLabel);
+      SMC_PineDrawingDelete(lowLine);
+      SMC_PineDrawingDelete(lowLabel);
    }
    if(trailingTop.initialized && trailingBottom.initialized)
    {
       datetime end=currentTime+seconds*20;
       datetime labelTime=currentTime+seconds*2;
-      if(showHigh && ObjectFind(0,highLine)>=0)
+      if(showHigh)
       {
-         SMC_MoveObjectPointIfChanged(highLine,0,trailingTop.time,trailingTop.current);
-         SMC_MoveObjectPointIfChanged(highLine,1,end,trailingTop.current);
+         SMC_PineLineSet(highLine,trailingTop.time,trailingTop.current,end,
+                         trailingTop.current,SMC_COLOR_BEARISH,
+                         STYLE_SOLID,1,false,false,true,10);
+         SMC_DrawText(highLabel,labelTime,trailingTop.current,
+                      SMC_TimeframeLabel(config.chartTimeframe)+" "+
+                      (swingBias<0 ? "Strong High" : "Weak High"),
+                      SMC_COLOR_BEARISH,ANCHOR_LEFT,8,true);
       }
-      if(showLow && ObjectFind(0,lowLine)>=0)
+      if(showLow)
       {
-         SMC_MoveObjectPointIfChanged(lowLine,0,trailingBottom.time,trailingBottom.current);
-         SMC_MoveObjectPointIfChanged(lowLine,1,end,trailingBottom.current);
-      }
-      if(showHigh && ObjectFind(0,highLabel)>=0)
-      {
-         SMC_MoveObjectPointIfChanged(highLabel,0,labelTime,trailingTop.current);
-         ObjectSetString(0,highLabel,OBJPROP_TEXT,
-                         SMC_TimeframeLabel(config.chartTimeframe)+" "+
-                         (swingBias<0 ? "Strong High" : "Weak High"));
-      }
-      if(showLow && ObjectFind(0,lowLabel)>=0)
-      {
-         SMC_MoveObjectPointIfChanged(lowLabel,0,labelTime,trailingBottom.current);
-         ObjectSetString(0,lowLabel,OBJPROP_TEXT,
-                         SMC_TimeframeLabel(config.chartTimeframe)+" "+
-                         (swingBias>0 ? "Strong Low" : "Weak Low"));
+         SMC_PineLineSet(lowLine,trailingBottom.time,trailingBottom.current,end,
+                         trailingBottom.current,SMC_COLOR_BULLISH,
+                         STYLE_SOLID,1,false,false,true,10);
+         SMC_DrawText(lowLabel,labelTime,trailingBottom.current,
+                      SMC_TimeframeLabel(config.chartTimeframe)+" "+
+                      (swingBias>0 ? "Strong Low" : "Weak Low"),
+                      SMC_COLOR_BULLISH,ANCHOR_LEFT,8,true);
       }
    }
    SMC_DrawPremiumDiscount(config,trailingTop,trailingBottom,trailingAnchorTime,
@@ -234,12 +206,15 @@ void SMC_DrawPremiumDiscount(const SMC_DrawConfig &config,
    if(!config.showPremiumDiscountZones || !trailingTop.initialized ||
       !trailingBottom.initialized || trailingTop.current<=trailingBottom.current)
    {
-      ObjectDelete(0,config.objectPrefix+"PD_Premium");
-      ObjectDelete(0,config.objectPrefix+"PD_Equilibrium");
-      ObjectDelete(0,config.objectPrefix+"PD_Discount");
-      ObjectDelete(0,config.objectPrefix+"PD_Premium_Label");
-      ObjectDelete(0,config.objectPrefix+"PD_Equilibrium_Label");
-      ObjectDelete(0,config.objectPrefix+"PD_Discount_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PD_Premium");
+      SMC_PineDrawingDelete(config.objectPrefix+"PD_Equilibrium");
+      SMC_PineDrawingDelete(config.objectPrefix+"PD_Discount");
+      SMC_PineDrawingDelete(config.objectPrefix+"PD_Premium_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PD_Equilibrium_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PD_Discount_Label");
+      SMC_ZoneCanvasRemove(config.objectPrefix+"PD_Premium");
+      SMC_ZoneCanvasRemove(config.objectPrefix+"PD_Equilibrium");
+      SMC_ZoneCanvasRemove(config.objectPrefix+"PD_Discount");
       return;
    }
    double top=trailingTop.current,bottom=trailingBottom.current;
@@ -253,11 +228,11 @@ void SMC_DrawPremiumDiscount(const SMC_DrawConfig &config,
    double eqBottom=0.525*bottom+0.475*top;
    double discountTop=0.95*bottom+0.05*top;
    SMC_DrawZoneBox(config.objectPrefix+"PD_Premium",start,finish,top,premiumBottom,
-               SMC_COLOR_BEARISH);
+               SMC_COLOR_BEARISH,80,100);
    SMC_DrawZoneBox(config.objectPrefix+"PD_Equilibrium",start,finish,eqTop,eqBottom,
-               SMC_COLOR_EQUILIBRIUM);
+               SMC_COLOR_EQUILIBRIUM,80,100);
    SMC_DrawZoneBox(config.objectPrefix+"PD_Discount",start,finish,discountTop,bottom,
-               SMC_COLOR_BULLISH);
+               SMC_COLOR_BULLISH,80,100);
    datetime middleTime=start+(finish-start)/2;
    double premiumPrice=SMC_LabelOffsetPrice(config.objectPrefix+"PD_Premium",
                                            (top+premiumBottom)/2,MathAbs(top-premiumBottom));
@@ -267,13 +242,13 @@ void SMC_DrawPremiumDiscount(const SMC_DrawConfig &config,
                                             (discountTop+bottom)/2,MathAbs(discountTop-bottom));
    SMC_DrawText(config.objectPrefix+"PD_Premium_Label",middleTime,
             premiumPrice,"Premium",SMC_COLOR_LABEL,
-            ANCHOR_CENTER);
+            ANCHOR_CENTER,8,true);
    SMC_DrawText(config.objectPrefix+"PD_Equilibrium_Label",middleTime,
             equilibriumPrice,"Equilibrium",SMC_COLOR_LABEL,
-            ANCHOR_CENTER);
+            ANCHOR_CENTER,8,true);
    SMC_DrawText(config.objectPrefix+"PD_Discount_Label",middleTime,
             discountPrice,"Discount",SMC_COLOR_LABEL,
-            ANCHOR_CENTER);
+            ANCHOR_CENTER,8,true);
 }
 
 void SMC_RenderPreviousLevels(const SMC_DrawConfig &config,const int ratesTotal,
@@ -286,10 +261,10 @@ void SMC_RenderPreviousLevels(const SMC_DrawConfig &config,const int ratesTotal,
                                time[0],ratesTotal,time,high,low);
    else
    {
-      ObjectDelete(0,config.objectPrefix+"PL_MH");
-      ObjectDelete(0,config.objectPrefix+"PL_ML");
-      ObjectDelete(0,config.objectPrefix+"PL_MH_Label");
-      ObjectDelete(0,config.objectPrefix+"PL_ML_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_MH");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_ML");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_MH_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_ML_Label");
    }
    if(config.showWeeklyLevels)
       SMC_DrawPreviousPeriodLevels(config,PERIOD_W1,"PL_W",config.weeklyLevelsStyle,
@@ -297,10 +272,10 @@ void SMC_RenderPreviousLevels(const SMC_DrawConfig &config,const int ratesTotal,
                                time[0],ratesTotal,time,high,low);
    else
    {
-      ObjectDelete(0,config.objectPrefix+"PL_WH");
-      ObjectDelete(0,config.objectPrefix+"PL_WL");
-      ObjectDelete(0,config.objectPrefix+"PL_WH_Label");
-      ObjectDelete(0,config.objectPrefix+"PL_WL_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_WH");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_WL");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_WH_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_WL_Label");
    }
    if(config.showDailyLevels)
       SMC_DrawPreviousPeriodLevels(config,PERIOD_D1,"PL_D",config.dailyLevelsStyle,
@@ -308,10 +283,10 @@ void SMC_RenderPreviousLevels(const SMC_DrawConfig &config,const int ratesTotal,
                                time[0],ratesTotal,time,high,low);
    else
    {
-      ObjectDelete(0,config.objectPrefix+"PL_DH");
-      ObjectDelete(0,config.objectPrefix+"PL_DL");
-      ObjectDelete(0,config.objectPrefix+"PL_DH_Label");
-      ObjectDelete(0,config.objectPrefix+"PL_DL_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_DH");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_DL");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_DH_Label");
+      SMC_PineDrawingDelete(config.objectPrefix+"PL_DL_Label");
    }
 }
 

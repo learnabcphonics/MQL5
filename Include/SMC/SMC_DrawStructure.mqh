@@ -6,31 +6,65 @@
 #include <SMC/SMC_DrawHelpers.mqh>
 
 void SMC_UpdateMarketBiasLabel(const SMC_DrawConfig &config,const int swingBias,
-                           const int internalBias)
+                               const int internalBias,
+                               const bool showHigherTimeframeBias,
+                               const SMC_HigherBiasState &higherBiasStates[])
 {
    string name=config.objectPrefix+"BIAS";
    if(!config.showMarketBias)
    {
-      ObjectDelete(0,name);
+      SMC_PineDrawingDelete(name);
+      for(int i=0;i<ArraySize(higherBiasStates);i++)
+         SMC_PineDrawingDelete(config.objectPrefix+"BIAS_"+
+                               SMC_TimeframeLabel(higherBiasStates[i].timeframe));
       return;
    }
-   if(ObjectFind(0,name)<0 && !ObjectCreate(0,name,OBJ_LABEL,0,0,0))
+   color biasColor=swingBias>0 ? SMC_COLOR_BULLISH :
+                   (swingBias<0 ? SMC_COLOR_BEARISH :
+                                  SMC_COLOR_EQUILIBRIUM);
+   SMC_PineScreenLabelSet(name,
+      "SMC ["+SMC_TimeframeLabel(config.chartTimeframe)+
+      "] Bias | Swing: "+SMC_BiasText(swingBias)+
+      " | Internal: "+SMC_BiasText(internalBias),
+      biasColor,CORNER_LEFT_UPPER,10,40,10,true);
+   if(!showHigherTimeframeBias)
+   {
+      for(int i=0;i<ArraySize(higherBiasStates);i++)
+         SMC_PineDrawingDelete(config.objectPrefix+"BIAS_"+
+                               SMC_TimeframeLabel(higherBiasStates[i].timeframe));
       return;
-   ObjectSetInteger(0,name,OBJPROP_CORNER,CORNER_LEFT_UPPER);
-   ObjectSetInteger(0,name,OBJPROP_XDISTANCE,10);
-   ObjectSetInteger(0,name,OBJPROP_YDISTANCE,40);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,SMC_RGBColor(
-                    swingBias>0 ? SMC_COLOR_BULLISH :
-                    (swingBias<0 ? SMC_COLOR_BEARISH : SMC_COLOR_EQUILIBRIUM)));
-   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,10);
-   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
-   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
-   ObjectSetInteger(0,name,OBJPROP_BACK,false);
-   ObjectSetString(0,name,OBJPROP_FONT,"Arial");
-   ObjectSetString(0,name,OBJPROP_TEXT,
-                   "SMC ["+SMC_TimeframeLabel(config.chartTimeframe)+
-                   "] Bias | Swing: "+SMC_BiasText(swingBias)+
-                   " | Internal: "+SMC_BiasText(internalBias));
+   }
+   int higherBiasRow=0;
+   for(int i=0;i<ArraySize(higherBiasStates);i++)
+   {
+      string timeframeLabel=SMC_TimeframeLabel(higherBiasStates[i].timeframe);
+      string higherBiasName=config.objectPrefix+"BIAS_"+timeframeLabel;
+      if(higherBiasStates[i].timeframe==config.chartTimeframe)
+      {
+         SMC_PineDrawingDelete(higherBiasName);
+         continue;
+      }
+      string higherText;
+      color higherColor=SMC_COLOR_EQUILIBRIUM;
+      if(higherBiasStates[i].valid)
+      {
+         higherText="SMC ["+timeframeLabel+
+                    "] Bias | Swing: "+
+                    SMC_BiasText(higherBiasStates[i].swingBias)+
+                    " | Internal: "+
+                    SMC_BiasText(higherBiasStates[i].internalBias);
+         higherColor=higherBiasStates[i].swingBias>0 ? SMC_COLOR_BULLISH :
+                     (higherBiasStates[i].swingBias<0 ? SMC_COLOR_BEARISH :
+                                                      SMC_COLOR_EQUILIBRIUM);
+      }
+      else
+         higherText="SMC ["+timeframeLabel+
+                    "] Bias | Loading closed-bar history";
+      SMC_PineScreenLabelSet(higherBiasName,
+                             higherText,higherColor,CORNER_LEFT_UPPER,
+                             10,60+higherBiasRow*20,10,true);
+      higherBiasRow++;
+   }
 }
 
 void SMC_DrawHorizontalStructure(const SMC_DrawConfig &config,
@@ -41,13 +75,28 @@ void SMC_DrawHorizontalStructure(const SMC_DrawConfig &config,
                              const color lineColor,const bool internal,
                              const bool bullish,const ENUM_SMC_SIZE labelSize)
 {
+   if(config.mode==SMC_HISTORICAL)
+   {
+      string lineName=config.objectPrefix+"STR_Line_"+id;
+      string labelName=config.objectPrefix+"STR_Label_"+id;
+      SMC_PineLineSet(lineName,pivot.time,pivot.current,rightTime,
+                      pivot.current,lineColor,
+                      internal ? STYLE_DASH : STYLE_SOLID,
+                      1,false,false,false,20);
+      datetime middle=pivot.time+(rightTime-pivot.time)/2;
+      SMC_DrawText(labelName,middle,pivot.current,
+                   SMC_TimeframeLabel(config.chartTimeframe)+" "+tag,
+                   lineColor,bullish ? ANCHOR_UPPER : ANCHOR_LOWER,
+                   (int)labelSize);
+      return;
+   }
    int slot=(internal ? 0 : 2)+(bullish ? 0 : 1);
    if(latestStructures[slot].valid && latestStructures[slot].id!=id)
    {
-      ObjectDelete(0,config.objectPrefix+"STR_Line_"+
-                     latestStructures[slot].id);
-      ObjectDelete(0,config.objectPrefix+"STR_Label_"+
-                     latestStructures[slot].id);
+      SMC_PineDrawingDelete(config.objectPrefix+"STR_Line_"+
+                            latestStructures[slot].id);
+      SMC_PineDrawingDelete(config.objectPrefix+"STR_Label_"+
+                            latestStructures[slot].id);
    }
    latestStructures[slot].pivot=pivot;
    latestStructures[slot].rightTime=rightTime;
@@ -65,6 +114,8 @@ void SMC_RenderPresentStructures(const SMC_DrawConfig &config,
                              const StructureDisplayState &latestStructures[],
                              bool &presentStructuresDirty)
 {
+   if(config.mode!=SMC_PRESENT)
+      return;
    if(!presentStructuresDirty)
       return;
    int count=MathMin(ArraySize(latestStructures),4);
@@ -89,61 +140,20 @@ void SMC_RenderPresentStructures(const SMC_DrawConfig &config,
       string labelName=config.objectPrefix+"STR_Label_"+latestStructures[oldest].id;
       PivotState pivot=latestStructures[oldest].pivot;
       datetime rightTime=latestStructures[oldest].rightTime;
-      if(ObjectFind(0,lineName)<0)
-      {
-         if(!ObjectCreate(0,lineName,OBJ_TREND,0,pivot.time,pivot.current,
-                          rightTime,pivot.current))
-            continue;
-      }
-      else
-      {
-         SMC_MoveObjectPointIfChanged(lineName,0,pivot.time,pivot.current);
-         SMC_MoveObjectPointIfChanged(lineName,1,rightTime,pivot.current);
-      }
-      ObjectSetInteger(0,lineName,OBJPROP_COLOR,
-                       SMC_RGBColor(latestStructures[oldest].lineColor));
-      ObjectSetInteger(0,lineName,OBJPROP_STYLE,
-                       latestStructures[oldest].internal ? STYLE_DASH : STYLE_SOLID);
-      ObjectSetInteger(0,lineName,OBJPROP_WIDTH,1);
-      ObjectSetInteger(0,lineName,OBJPROP_RAY_RIGHT,false);
-      ObjectSetInteger(0,lineName,OBJPROP_SELECTABLE,false);
+      SMC_PineLineSet(lineName,pivot.time,pivot.current,rightTime,
+                      pivot.current,latestStructures[oldest].lineColor,
+                      latestStructures[oldest].internal ? STYLE_DASH :
+                                                         STYLE_SOLID,
+                      1,false,false,true,20);
       datetime middle=pivot.time+(rightTime-pivot.time)/2;
       SMC_DrawText(labelName,middle,pivot.current,
                    SMC_TimeframeLabel(config.chartTimeframe)+" "+
                    latestStructures[oldest].tag,
                    latestStructures[oldest].lineColor,
                    latestStructures[oldest].bullish ? ANCHOR_UPPER : ANCHOR_LOWER,
-                   (int)latestStructures[oldest].labelSize);
+                   (int)latestStructures[oldest].labelSize,true);
    }
    presentStructuresDirty=false;
-}
-
-void SMC_ExtendPresentStructures(const SMC_DrawConfig &config,
-                             StructureDisplayState &latestStructures[],
-                             const bool presentStructuresDirty,
-                             const datetime rightTime)
-{
-   if(presentStructuresDirty)
-      return;
-   for(int i=0;i<ArraySize(latestStructures);i++)
-   {
-      if(!latestStructures[i].valid)
-         continue;
-      latestStructures[i].rightTime=rightTime;
-      string lineName=config.objectPrefix+"STR_Line_"+latestStructures[i].id;
-      string labelName=config.objectPrefix+"STR_Label_"+latestStructures[i].id;
-      PivotState pivot=latestStructures[i].pivot;
-      if(ObjectFind(0,lineName)>=0)
-      {
-         SMC_MoveObjectPointIfChanged(lineName,0,pivot.time,pivot.current);
-         SMC_MoveObjectPointIfChanged(lineName,1,rightTime,pivot.current);
-      }
-      if(ObjectFind(0,labelName)>=0)
-      {
-         datetime middle=pivot.time+(rightTime-pivot.time)/2;
-         SMC_MoveObjectPointIfChanged(labelName,0,middle,pivot.current);
-      }
-   }
 }
 
 bool SMC_IsStructureVisible(const SMC_DrawConfig &config,const bool internal,

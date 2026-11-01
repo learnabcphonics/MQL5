@@ -8,6 +8,7 @@ void ConfigureDrawing()
    DrawConfig.objectPrefix=ObjectPrefix;
    DrawConfig.symbol=_Symbol;
    DrawConfig.chartTimeframe=_Period;
+   DrawConfig.mode=DisplayMode;
    DrawConfig.showMarketBias=ShowMarketBias;
    DrawConfig.showInternalStructure=ShowInternalStructure;
    DrawConfig.showSwingStructure=ShowSwingStructure;
@@ -35,6 +36,137 @@ void ConfigureDrawing()
    DrawConfig.monthlyLevelsStyle=MonthlyLevelsStyle;
 }
 
+void SMC_KeepHistoricalChartView()
+{
+   long autoScroll=0;
+   long firstVisibleBar=0;
+   long visibleBars=0;
+   if(!ChartGetInteger(0,CHART_AUTOSCROLL,0,autoScroll) ||
+      !ChartGetInteger(0,CHART_FIRST_VISIBLE_BAR,0,firstVisibleBar) ||
+      !ChartGetInteger(0,CHART_VISIBLE_BARS,0,visibleBars))
+   {
+      PrintFormat("SMC: unable to inspect chart scroll position (error=%d).",
+                  GetLastError());
+      return;
+   }
+   long rightmostVisibleBar=firstVisibleBar-visibleBars+1;
+   if(autoScroll!=0 && rightmostVisibleBar>0 &&
+      !ChartSetInteger(0,CHART_AUTOSCROLL,false))
+      PrintFormat("SMC: unable to disable auto-scroll while viewing history (error=%d).",
+                  GetLastError());
+}
+
+bool SMC_ComputeClosedTimeframeBias(const ENUM_TIMEFRAMES timeframe,
+                                    int &swingBias,int &internalBias)
+{
+   MqlRates bars[];
+   ArraySetAsSeries(bars,true);
+   int copied=CopyRates(_Symbol,timeframe,1,MaxBarsToProcess,bars);
+   int minimumBars=MathMax(SwingLength,SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE)+3;
+   if(copied<minimumBars)
+   {
+      PrintFormat("SMC: insufficient closed %s bars for higher-timeframe bias (bars=%d, error=%d).",
+                  EnumToString(timeframe),copied,GetLastError());
+      return false;
+   }
+   ArraySetAsSeries(bars,true);
+
+   datetime times[];
+   double opens[],highs[],lows[],closes[];
+   if(ArrayResize(times,copied)!=copied ||
+      ArrayResize(opens,copied)!=copied ||
+      ArrayResize(highs,copied)!=copied ||
+      ArrayResize(lows,copied)!=copied ||
+      ArrayResize(closes,copied)!=copied)
+   {
+      PrintFormat("SMC: unable to allocate %s bias history (error=%d).",
+                  EnumToString(timeframe),GetLastError());
+      return false;
+   }
+   ArraySetAsSeries(times,true);
+   ArraySetAsSeries(opens,true);
+   ArraySetAsSeries(highs,true);
+   ArraySetAsSeries(lows,true);
+   ArraySetAsSeries(closes,true);
+   for(int i=0;i<copied;i++)
+   {
+      times[i]=bars[i].time;
+      opens[i]=bars[i].open;
+      highs[i]=bars[i].high;
+      lows[i]=bars[i].low;
+      closes[i]=bars[i].close;
+   }
+
+   SMC_State higherState;
+   if(!SMC_ResetState(higherState))
+      return false;
+   if(ArrayResize(higherState.AtrCache,copied)!=copied ||
+      ArrayResize(higherState.MeanRangeCache,copied)!=copied ||
+      ArrayResize(higherState.TrueRangeCache,copied)!=copied ||
+      ArrayResize(higherState.ParsedHighs,copied)!=copied ||
+      ArrayResize(higherState.ParsedLows,copied)!=copied)
+   {
+      PrintFormat("SMC: unable to allocate %s bias caches (error=%d).",
+                  EnumToString(timeframe),GetLastError());
+      return false;
+   }
+   ArraySetAsSeries(higherState.AtrCache,true);
+   ArraySetAsSeries(higherState.MeanRangeCache,true);
+   ArraySetAsSeries(higherState.TrueRangeCache,true);
+   ArraySetAsSeries(higherState.ParsedHighs,true);
+   ArraySetAsSeries(higherState.ParsedLows,true);
+   if(!SMC_InitializeCalculationCaches(copied,copied,highs,lows,closes,
+                                       OrderBlockFilter,higherState))
+      return false;
+
+   int oldest=copied-1;
+   int warmup=MathMax(SwingLength,SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE);
+   for(int i=oldest-warmup-1;i>=0;i--)
+   {
+      StructureEvent events[2];
+      int eventCount=0;
+      SMC_DetectStructure(false,SwingLength,i,copied,times,opens,highs,lows,
+                          closes,false,SwingLabelSize,false,higherState,
+                          events,eventCount);
+      SMC_DetectStructure(true,SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE,i,copied,
+                          times,opens,highs,lows,closes,
+                          InternalConfluenceFilter,InternalLabelSize,false,
+                          higherState,events,eventCount);
+   }
+   swingBias=higherState.SwingBias;
+   internalBias=higherState.InternalBias;
+   return true;
+}
+
+void SMC_UpdateMarketBiasPanel()
+{
+   if(ShowMarketBias && ShowHigherTimeframeBias)
+   {
+      for(int i=0;i<ArraySize(HigherBiasStates);i++)
+      {
+         datetime latestClosedBar=
+            iTime(_Symbol,HigherBiasStates[i].timeframe,1);
+         if(latestClosedBar>0 &&
+            latestClosedBar!=HigherBiasStates[i].lastClosedBar &&
+            HigherBiasStates[i].lastAttemptChartBar!=State.LastProcessedBar)
+         {
+            HigherBiasStates[i].lastAttemptChartBar=State.LastProcessedBar;
+            int swingBias=0,internalBias=0;
+            if(SMC_ComputeClosedTimeframeBias(HigherBiasStates[i].timeframe,
+                                              swingBias,internalBias))
+            {
+               HigherBiasStates[i].swingBias=swingBias;
+               HigherBiasStates[i].internalBias=internalBias;
+               HigherBiasStates[i].lastClosedBar=latestClosedBar;
+               HigherBiasStates[i].valid=true;
+            }
+         }
+      }
+   }
+   SMC_UpdateMarketBiasLabel(DrawConfig,State.SwingBias,State.InternalBias,
+                             ShowHigherTimeframeBias,HigherBiasStates);
+}
+
 void RemoveMitigatedOrderBlocks(const double high,const double low,const double close,
                                const datetime barTime)
 {
@@ -50,8 +182,8 @@ void RemoveMitigatedOrderBlocks(const double high,const double low,const double 
    for(int i=0;i<removedCount;i++)
    {
       string objectName=SMC_OrderBlockObjectName(DrawConfig,removed[i]);
-      ObjectDelete(0,objectName);
-      ObjectDelete(0,objectName+"_Label");
+      SMC_PineDrawingDelete(objectName);
+      SMC_PineDrawingDelete(objectName+"_Label");
       ObjectDelete(0,objectName+"_Origin");
    }
 }
@@ -144,7 +276,8 @@ void DrawActiveFairValueGaps(const MqlRates &bars[])
       selected[oldest]=false;
       FairValueGapState gap=State.FairValueGaps[oldest];
       gap.right=right;
-      color gapColor=(gap.bias>0 ? SMC_COLOR_BULLISH : SMC_COLOR_BEARISH);
+      color gapColor=(gap.bias>0 ? SMC_COLOR_FVG_BULLISH :
+                                   SMC_COLOR_FVG_BEARISH);
       SMC_DrawFairValueGap(DrawConfig,gap,gapColor);
    }
 }

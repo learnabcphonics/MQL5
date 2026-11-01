@@ -18,6 +18,7 @@
 #property indicator_label1  "SMC trend candles"
 
 input group "Smart Money Concepts"
+input ENUM_SMC_MODE DisplayMode = SMC_HISTORICAL;
 input bool ColorCandles = false;
 input int MaxBarsToProcess = 2000;
 
@@ -26,6 +27,7 @@ input bool HideTradeHistoryMarkers = true;
 
 input group "Market Bias"
 input bool ShowMarketBias = true;
+input bool ShowHigherTimeframeBias = true;
 
 input group "Real Time Internal Structure"
 input bool ShowInternalStructure = true;
@@ -88,7 +90,11 @@ SMC_State State;
 bool PreviousTradeHistoryVisibility = false;
 bool TradeHistoryVisibilityCaptured = false;
 bool TradeHistoryVisibilityChanged = false;
+bool PreviousMouseMoveEvents = false;
+bool MouseMoveEventsCaptured = false;
+bool MouseMoveEventsChanged = false;
 ENUM_TIMEFRAMES LastChartPeriod = PERIOD_CURRENT;
+SMC_HigherBiasState HigherBiasStates[3];
 
 #include <SMC/SMC_Draw.mqh>
 #include <SMC/SMC_IndicatorRuntime.mqh>
@@ -105,6 +111,9 @@ int OnInit()
         MaxFairValueGapsToShow>100)) || EqualHighLowThreshold<0.0 ||
       EqualHighLowThreshold>0.5)
       return INIT_PARAMETERS_INCORRECT;
+   HigherBiasStates[0].timeframe=PERIOD_H4;
+   HigherBiasStates[1].timeframe=PERIOD_D1;
+   HigherBiasStates[2].timeframe=PERIOD_W1;
    string legacyObjectPrefix="SC"+
                              IntegerToString((int)(ChartID()%100000))+"_";
    SMC_DeleteObjectsWithPrefix(legacyObjectPrefix);
@@ -125,6 +134,24 @@ int OnInit()
             ChartSetInteger(0,CHART_SHOW_TRADE_HISTORY,false);
          if(!TradeHistoryVisibilityChanged)
             PrintFormat("SMC: unable to hide trade-history markers (error=%d).",
+                        GetLastError());
+      }
+   }
+   long mouseMoveEvents=0;
+   MouseMoveEventsCaptured=
+      ChartGetInteger(0,CHART_EVENT_MOUSE_MOVE,0,mouseMoveEvents);
+   if(!MouseMoveEventsCaptured)
+      PrintFormat("SMC: unable to read chart mouse-event setting (error=%d).",
+                  GetLastError());
+   else
+   {
+      PreviousMouseMoveEvents=(mouseMoveEvents!=0);
+      if(!PreviousMouseMoveEvents)
+      {
+         MouseMoveEventsChanged=
+            ChartSetInteger(0,CHART_EVENT_MOUSE_MOVE,true);
+         if(!MouseMoveEventsChanged)
+            PrintFormat("SMC: unable to enable mouse events for chart navigation (error=%d).",
                         GetLastError());
       }
    }
@@ -160,6 +187,33 @@ void OnDeinit(const int reason)
          !ChartSetInteger(0,CHART_SHOW_TRADE_HISTORY,true))
          PrintFormat("SMC: unable to restore trade-history visibility (error=%d).",
                      GetLastError());
+   }
+   if(MouseMoveEventsCaptured && MouseMoveEventsChanged &&
+      !PreviousMouseMoveEvents)
+   {
+      long mouseMoveEvents=0;
+      if(ChartGetInteger(0,CHART_EVENT_MOUSE_MOVE,0,mouseMoveEvents) &&
+         mouseMoveEvents!=0 &&
+         !ChartSetInteger(0,CHART_EVENT_MOUSE_MOVE,false))
+         PrintFormat("SMC: unable to restore chart mouse-event setting (error=%d).",
+                     GetLastError());
+   }
+}
+
+void OnChartEvent(const int id,const long &lparam,const double &dparam,
+                  const string &sparam)
+{
+   if(id==CHARTEVENT_MOUSE_MOVE && (StringToInteger(sparam)&1)!=0)
+   {
+      SMC_KeepHistoricalChartView();
+      SMC_RenderPineDrawings();
+      SMC_RenderZoneCanvas(ObjectPrefix);
+   }
+   if(id==CHARTEVENT_CHART_CHANGE)
+   {
+      SMC_KeepHistoricalChartView();
+      SMC_RenderPineDrawings();
+      SMC_RenderZoneCanvas(ObjectPrefix);
    }
 }
 
@@ -219,22 +273,14 @@ bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &ope
    int periodSeconds=PeriodSeconds(_Period);
    if(periodSeconds<=0) periodSeconds=60;
    SMC_DrawOrderBlockObjects(DrawConfig,State.OrderBlocks,time[0],periodSeconds);
-   datetime structureRight=time[0]+periodSeconds;
-   for(int i=0;i<ArraySize(State.LatestStructures);i++)
-      if(State.LatestStructures[i].valid)
-         State.LatestStructures[i].rightTime=structureRight;
    if(ShowInternalStructure || ShowSwingStructure)
-   {
-      SMC_ExtendPresentStructures(DrawConfig,State.LatestStructures,
-                                 State.PresentStructuresDirty,structureRight);
       SMC_RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
-   }
    SMC_RenderPreviousLevels(DrawConfig,ratesTotal,time,high,low);
    SMC_DrawTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
                           time[0],periodSeconds);
    SMC_DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
                            State.TrailingAnchorTime,time[0],periodSeconds);
-   SMC_UpdateMarketBiasLabel(DrawConfig,State.SwingBias,State.InternalBias);
+   SMC_UpdateMarketBiasPanel();
    ChartRedraw(0);
    State.LastProcessedBar=time[0];
    State.LastRatesTotal=ratesTotal;
@@ -266,17 +312,8 @@ void UpdateCurrentBar(const int ratesTotal,const datetime &time[],
 
    if(ShowFairValueGaps)
       UpdateFairValueGapsOnTick(time[0],high[0],low[0]);
-   int periodSeconds=MathMax(1,PeriodSeconds(_Period));
-   datetime structureRight=time[0]+periodSeconds;
-   for(int i=0;i<ArraySize(State.LatestStructures);i++)
-      if(State.LatestStructures[i].valid)
-         State.LatestStructures[i].rightTime=structureRight;
    if(ShowInternalStructure || ShowSwingStructure)
-   {
-      SMC_ExtendPresentStructures(DrawConfig,State.LatestStructures,
-                                 State.PresentStructuresDirty,structureRight);
       SMC_RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
-   }
 }
 
 bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
@@ -362,10 +399,6 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
 
    int periodSeconds=PeriodSeconds(_Period);
    if(periodSeconds<=0) periodSeconds=60;
-   datetime structureRight=time[0]+periodSeconds;
-   for(int i=0;i<ArraySize(State.LatestStructures);i++)
-      if(State.LatestStructures[i].valid)
-         State.LatestStructures[i].rightTime=structureRight;
    if(ShowInternalStructure || ShowSwingStructure)
       SMC_RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
    SMC_DrawOrderBlockObjects(DrawConfig,State.OrderBlocks,time[0],periodSeconds);
@@ -376,7 +409,7 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
                           time[0],periodSeconds);
    SMC_DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
                            State.TrailingAnchorTime,time[0],periodSeconds);
-   SMC_UpdateMarketBiasLabel(DrawConfig,State.SwingBias,State.InternalBias);
+   SMC_UpdateMarketBiasPanel();
    ChartRedraw(0);
    State.LastRatesTotal=ratesTotal;
    return true;
@@ -400,20 +433,30 @@ int OnCalculate(const int rates_total,const int prev_calculated,
       ConfigureDrawing();
       if(!RebuildHistoricalState(rates_total,time,open,high,low,close))
          return 0;
+      SMC_RenderPineDrawings();
+      SMC_RenderZoneCanvas(ObjectPrefix);
       return rates_total;
    }
    if(prev_calculated>0 && State.LastProcessedBar>0 &&
       time[0]>State.LastProcessedBar)
    {
       if(ProcessNewBar(rates_total,time,open,high,low,close))
+      {
+         SMC_RenderPineDrawings();
+         SMC_RenderZoneCanvas(ObjectPrefix);
          return rates_total;
+      }
    }
    if(prev_calculated>0 && State.LastProcessedBar==time[0])
    {
       UpdateCurrentBar(rates_total,time,open,high,low,close);
+      SMC_RenderPineDrawings();
+      SMC_RenderZoneCanvas(ObjectPrefix);
       return rates_total;
    }
    if(!RebuildHistoricalState(rates_total,time,open,high,low,close))
       return 0;
+   SMC_RenderPineDrawings();
+   SMC_RenderZoneCanvas(ObjectPrefix);
    return rates_total;
 }

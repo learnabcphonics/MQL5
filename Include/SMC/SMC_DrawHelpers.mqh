@@ -5,6 +5,8 @@
 
 #include <SMC/SMC_Types.mqh>
 #include <SMC/SMC_Palette.mqh>
+#include <SMC/SMC_PineDrawings.mqh>
+#include <SMC/SMC_ZoneCanvas.mqh>
 
 ENUM_LINE_STYLE SMC_LineStyle(const ENUM_SMC_LINE_STYLE style)
 {
@@ -26,8 +28,10 @@ void SMC_DeleteObjectsWithPrefix(const string prefix)
    {
       string name=ObjectName(0,i,-1,-1);
       if(StringFind(name,prefix)==0)
-         ObjectDelete(0,name);
+         SMC_PineDrawingDelete(name);
    }
+   SMC_PineDrawingDeletePrefix(prefix);
+   SMC_ZoneCanvasRemovePrefix(prefix);
 }
 
 int SMC_ZoneZOrder(const string objectName)
@@ -76,6 +80,7 @@ bool SMC_ZoneRectanglesOverlap(const datetime leftA,const datetime rightA,
 void SMC_ClearObjects(const string prefix)
 {
    SMC_DeleteObjectsWithPrefix(prefix);
+   SMC_ZoneCanvasRelease(prefix);
 }
 
 void SMC_MoveObjectPointIfChanged(const string name,const int point,
@@ -91,21 +96,10 @@ void SMC_MoveObjectPointIfChanged(const string name,const int point,
 
 void SMC_DrawText(const string name,const datetime when,const double price,
               const string text,const color textColor,const ENUM_ANCHOR_POINT anchor,
-              const int fontSize=8)
+              const int fontSize=8,const bool keep=false,
+              const int zOrder=100)
 {
-   if(ObjectFind(0,name)<0 && !ObjectCreate(0,name,OBJ_TEXT,0,when,price))
-      return;
-   SMC_MoveObjectPointIfChanged(name,0,when,price);
-   ObjectSetString(0,name,OBJPROP_TEXT,text);
-   ObjectSetString(0,name,OBJPROP_FONT,"Arial");
-   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,fontSize);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,SMC_RGBColor(textColor));
-   ObjectSetInteger(0,name,OBJPROP_ANCHOR,anchor);
-   ObjectSetInteger(0,name,OBJPROP_BACK,false);
-   ObjectSetInteger(0,name,OBJPROP_ZORDER,100);
-   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
-   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
-   ObjectSetString(0,name,OBJPROP_TOOLTIP,"\n");
+   SMC_PineLabelSet(name,when,price,text,textColor,anchor,fontSize,keep,zOrder);
 }
 
 string SMC_BiasText(const int bias)

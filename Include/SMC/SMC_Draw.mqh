@@ -4,7 +4,9 @@
 #define SMC_DRAW_MQH
 
 #include <SMC/SMC_DrawHelpers.mqh>
+#include <SMC/SMC_DrawAreas.mqh>
 #include <SMC/SMC_DrawStructure.mqh>
+#include <SMC/SMC_DrawLiquidity.mqh>
 #include <SMC/SMC_DrawZones.mqh>
 #include <SMC/SMC_DrawLevels.mqh>
 
