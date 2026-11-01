@@ -4,9 +4,14 @@
 #property version   "1.00"
 #property indicator_chart_window
 #include <SMC/SMC_Types.mqh>
-#include <SMC/SMC_Engine.mqh>
 #include <SMC/SMC_State.mqh>
+#include <SMC/SMC_Config.mqh>
 #include <SMC/SMC_Palette.mqh>
+#include <SMC/SMC_OrderBlock.mqh>
+#include <SMC/SMC_Structure.mqh>
+#include <SMC/SMC_FVG.mqh>
+#include <SMC/SMC_EqualLevels.mqh>
+#include <SMC/SMC_Calculation.mqh>
 #property indicator_buffers 5
 #property indicator_plots   1
 #property indicator_type1   DRAW_COLOR_CANDLES
@@ -35,29 +40,29 @@ input ENUM_SMC_SHOW SwingBullishStructure = SMC_ALL;
 input ENUM_SMC_SHOW SwingBearishStructure = SMC_ALL;
 input ENUM_SMC_SIZE SwingLabelSize = SMC_SMALL;
 input bool ShowSwingPoints = false;
-input int SwingLength = 50;
+input int SwingLength = SMC_DEFAULT_SWING_LENGTH;
 input bool ShowStrongWeakHighLow = true;
 
 input group "Order Blocks"
 input bool ShowInternalOrderBlocks = true;
-input int InternalOrderBlocksToShow = 3;
+input int InternalOrderBlocksToShow = SMC_DEFAULT_MAX_ORDER_BLOCKS_TO_SHOW;
 input bool ShowSwingOrderBlocks = false;
-input int SwingOrderBlocksToShow = 5;
-input int OrderBlockExtend = 20;
+input int SwingOrderBlocksToShow = SMC_DEFAULT_MAX_SWING_ORDER_BLOCKS_TO_SHOW;
+input int OrderBlockExtend = SMC_DEFAULT_ORDER_BLOCK_EXTEND;
 input ENUM_SMC_FILTER OrderBlockFilter = SMC_ATR;
 input ENUM_SMC_MITIGATION OrderBlockMitigation = SMC_HIGH_LOW;
 
 input group "EQH/EQL"
 input bool ShowEqualHighsLows = true;
-input int EqualHighLowConfirmationBars = 3;
-input double EqualHighLowThreshold = 0.1;
+input int EqualHighLowConfirmationBars = SMC_DEFAULT_EQUAL_HIGH_LOW_BARS;
+input double EqualHighLowThreshold = SMC_DEFAULT_EQUAL_HIGH_LOW_THRESHOLD;
 input ENUM_SMC_SIZE EqualHighLowLabelSize = SMC_TINY;
 
 input group "Fair Value Gaps"
 input bool ShowFairValueGaps = false;
 input bool FairValueGapAutoThreshold = false;
 input int FairValueGapExtend = 1;
-input int MaxFairValueGapsToShow = 5;
+input int MaxFairValueGapsToShow = SMC_DEFAULT_MAX_FVG_COUNT;
 
 input group "Previous Period Highs & Lows"
 input bool ShowDailyLevels = false;
@@ -71,7 +76,7 @@ input group "Premium & Discount Zones"
 input bool ShowPremiumDiscountZones = false;
 
 double CandleOpen[], CandleHigh[], CandleLow[], CandleClose[], CandleColorIndex[];
-string ObjectPrefix = "SMC_";
+string ObjectPrefix = SMC_DEFAULT_OBJECT_PREFIX;
 SMC_DrawConfig DrawConfig;
 SMC_State State;
 bool PreviousTradeHistoryVisibility = false;
@@ -79,254 +84,8 @@ bool TradeHistoryVisibilityCaptured = false;
 bool TradeHistoryVisibilityChanged = false;
 ENUM_TIMEFRAMES LastChartPeriod = PERIOD_CURRENT;
 
-color BullColor(const bool internal)
-{
-   return SMC_COLOR_BULLISH;
-}
-
-color BearColor(const bool internal)
-{
-   return SMC_COLOR_BEARISH;
-}
-
-void ConfigureDrawing()
-{
-   DrawConfig.objectPrefix=ObjectPrefix;
-   DrawConfig.symbol=_Symbol;
-   DrawConfig.chartTimeframe=_Period;
-   DrawConfig.showMarketBias=ShowMarketBias;
-   DrawConfig.showInternalStructure=ShowInternalStructure;
-   DrawConfig.showSwingStructure=ShowSwingStructure;
-   DrawConfig.internalBullishStructure=InternalBullishStructure;
-   DrawConfig.internalBearishStructure=InternalBearishStructure;
-   DrawConfig.swingBullishStructure=SwingBullishStructure;
-   DrawConfig.swingBearishStructure=SwingBearishStructure;
-   DrawConfig.showInternalOrderBlocks=ShowInternalOrderBlocks;
-   DrawConfig.showSwingOrderBlocks=ShowSwingOrderBlocks;
-   DrawConfig.internalOrderBlocksToShow=InternalOrderBlocksToShow;
-   DrawConfig.swingOrderBlocksToShow=SwingOrderBlocksToShow;
-   DrawConfig.orderBlockExtend=OrderBlockExtend;
-   DrawConfig.showSwingPoints=ShowSwingPoints;
-   DrawConfig.swingLength=SwingLength;
-   DrawConfig.showStrongWeakHighLow=ShowStrongWeakHighLow;
-   DrawConfig.showPremiumDiscountZones=ShowPremiumDiscountZones;
-   DrawConfig.showDailyLevels=ShowDailyLevels;
-   DrawConfig.showWeeklyLevels=ShowWeeklyLevels;
-   DrawConfig.showMonthlyLevels=ShowMonthlyLevels;
-   DrawConfig.dailyLevelsStyle=DailyLevelsStyle;
-   DrawConfig.weeklyLevelsStyle=WeeklyLevelsStyle;
-   DrawConfig.monthlyLevelsStyle=MonthlyLevelsStyle;
-}
-
 #include <SMC/SMC_Draw.mqh>
-
-void RemoveMitigatedOrderBlocks(const double high,const double low,const double close,
-                               const datetime barTime)
-{
-   OrderBlockState removed[];
-   int removedCount=0;
-   if(!SMC_RemoveMitigatedOrderBlocks(high,low,close,barTime,
-                                      OrderBlockMitigation,State,
-                                      removed,removedCount))
-   {
-      Print("SMC: order block mitigation analysis failed.");
-      return;
-   }
-   for(int i=0;i<removedCount;i++)
-   {
-      string objectName=SMC_OrderBlockObjectName(DrawConfig,removed[i]);
-      ObjectDelete(0,objectName);
-      ObjectDelete(0,objectName+"_Label");
-      ObjectDelete(0,objectName+"_Origin");
-   }
-}
-
-void RenderStructureEvents(const StructureEvent &events[],const int eventCount)
-{
-   datetime rightTime=0;
-   for(int i=0;i<eventCount;i++)
-   {
-      StructureEvent event=events[i];
-      if(!IsStructureVisible(DrawConfig,event.internal,event.bullish,event.tag))
-         continue;
-      if(rightTime==0)
-         rightTime=event.time+PeriodSeconds(_Period);
-      color lineColor=(event.bullish ?
-                       SMC_DrawBullColor(DrawConfig,event.internal) :
-                       SMC_DrawBearColor(DrawConfig,event.internal));
-      string id=(event.internal ? "I_" : "S_")+
-                IntegerToString((int)event.time);
-      DrawHorizontalStructure(DrawConfig,State.LatestStructures,
-                              State.PresentStructuresDirty,id,event.pivot,rightTime,
-                              event.tag,lineColor,event.internal,event.bullish,
-                              event.labelSize);
-   }
-}
-
-void DetectEqualHighLow(const int size,int &legState,
-                        PivotState &equalHigh,PivotState &equalLow,
-                        const int i,const int ratesTotal,const datetime &time[],
-                        const double &high[],const double &low[],const double &atr[])
-{
-   EqualLevelEvent event;
-   SMC_DetectEqualHighLow(size,legState,equalHigh,equalLow,i,ratesTotal,time,
-                          high,low,atr,EqualHighLowThreshold,event);
-   if(!event.valid)
-      return;
-   if(ShowEqualHighsLows)
-      DrawEqualLevelEvent(DrawConfig,event,
-                          event.high ? BearColor(false) : BullColor(false),
-                          EqualHighLowLabelSize);
-}
-
-void DrawActiveFairValueGaps(const MqlRates &bars[])
-{
-   if(!ShowFairValueGaps || ArraySize(bars)==0)
-      return;
-   int gapCount=ArraySize(State.FairValueGaps);
-   bool selected[];
-   if(ArrayResize(selected,gapCount)!=gapCount)
-   {
-      PrintFormat("SMC: unable to allocate FVG display selection (error=%d).",
-                  GetLastError());
-      return;
-   }
-   for(int i=0;i<gapCount;i++)
-      selected[i]=false;
-
-   int displayCount=MathMin(MaxFairValueGapsToShow,gapCount);
-   for(int rank=0;rank<displayCount;rank++)
-   {
-      int newest=-1;
-      for(int i=0;i<gapCount;i++)
-      {
-         if(selected[i])
-            continue;
-         if(newest<0 || State.FairValueGaps[i].time>State.FairValueGaps[newest].time)
-            newest=i;
-      }
-      if(newest>=0)
-         selected[newest]=true;
-   }
-
-   int periodSeconds=PeriodSeconds(_Period);
-   if(periodSeconds<=0)
-      periodSeconds=60;
-   datetime right=bars[0].time+FairValueGapExtend*periodSeconds;
-   for(int i=0;i<gapCount;i++)
-   {
-      FairValueGapState gap=State.FairValueGaps[i];
-      if(!selected[i])
-      {
-         DeleteFairValueGap(DrawConfig,gap);
-         continue;
-      }
-      gap.right=right;
-      color gapColor=(gap.bias>0 ? SMC_COLOR_BULLISH : SMC_COLOR_BEARISH);
-      DrawFairValueGap(DrawConfig,gap,gapColor);
-   }
-}
-
-void UpdateFairValueGapsOnTick(const datetime chartBarTime,
-                               const double currentHigh,const double currentLow)
-{
-   if(!ShowFairValueGaps)
-      return;
-   if(State.FVGUpdateStateInitialized && State.LastFVGUpdateBarTime==chartBarTime &&
-      State.LastFVGUpdateHigh==currentHigh && State.LastFVGUpdateLow==currentLow)
-      return;
-   MqlRates bars[];
-   ArraySetAsSeries(bars,true);
-   int copied=CopyRates(_Symbol,_Period,0,4,bars);
-   if(copied<4)
-   {
-      PrintFormat("SMC: unable to update FVG history for chart timeframe %s (bars=%d, error=%d).",
-                  EnumToString(_Period),copied,GetLastError());
-      return;
-   }
-   FairValueGapState removed[],added[];
-   int removedCount=0,addedCount=0;
-   if(!SMC_UpdateFairValueGaps(bars,chartBarTime,PeriodSeconds(_Period),
-                               FairValueGapExtend,FairValueGapAutoThreshold,
-                               _Point,State,
-                               removed,removedCount,added,addedCount))
-   {
-      Print("SMC: failed to update fair value gap analysis.");
-      return;
-   }
-   for(int i=0;i<removedCount;i++)
-      DeleteFairValueGap(DrawConfig,removed[i]);
-   DrawActiveFairValueGaps(bars);
-   State.LastFVGUpdateBarTime=chartBarTime;
-   State.LastFVGUpdateHigh=currentHigh;
-   State.LastFVGUpdateLow=currentLow;
-   State.FVGUpdateStateInitialized=true;
-}
-
-bool RefreshCurrentFVGThreshold()
-{
-   if(!ShowFairValueGaps)
-      return true;
-   MqlRates bars[];
-   ArraySetAsSeries(bars,true);
-   int copied=CopyRates(_Symbol,_Period,0,MaxBarsToProcess,bars);
-   if(copied<3)
-   {
-      PrintFormat("SMC: unable to refresh FVG threshold for chart timeframe %s (bars=%d, error=%d).",
-                  EnumToString(_Period),copied,GetLastError());
-      return false;
-   }
-   return SMC_UpdateFVGThreshold(bars,_Point,State);
-}
-
-void DrawFVGs()
-{
-   if(!ShowFairValueGaps)
-      return;
-   MqlRates bars[];
-   ArraySetAsSeries(bars,true);
-   int copied=CopyRates(_Symbol,_Period,0,MaxBarsToProcess,bars);
-   if(copied<3)
-   {
-      PrintFormat("SMC: unable to load FVG history for chart timeframe %s (bars=%d, error=%d).",
-                  EnumToString(_Period),copied,GetLastError());
-      return;
-   }
-   int periodSeconds=PeriodSeconds(_Period);
-   if(periodSeconds<=0)
-      periodSeconds=60;
-   if(!SMC_AnalyzeHistoricalFVG(bars,FairValueGapAutoThreshold,
-                                FairValueGapExtend,periodSeconds,_Point,
-                                State))
-   {
-      Print("SMC: failed to analyze historical fair value gaps.");
-      return;
-   }
-   DrawActiveFairValueGaps(bars);
-}
-
-void UpdateTrailingLevelsOnTick(const datetime currentTime,const double currentHigh,
-                                const double currentLow,const int periodSeconds)
-{
-   double previousTop=State.TrailingTop.current;
-   datetime previousTopTime=State.TrailingTop.time;
-   double previousBottom=State.TrailingBottom.current;
-   datetime previousBottomTime=State.TrailingBottom.time;
-   bool hadTrailingTop=State.TrailingTop.initialized;
-   bool hadTrailingBottom=State.TrailingBottom.initialized;
-   SMC_UpdateTrailingLevels(true,currentTime,currentHigh,currentLow,
-                            State);
-   bool levelsChanged=hadTrailingTop!=State.TrailingTop.initialized ||
-                      hadTrailingBottom!=State.TrailingBottom.initialized ||
-                      previousTop!=State.TrailingTop.current ||
-                      previousTopTime!=State.TrailingTop.time ||
-                      previousBottom!=State.TrailingBottom.current ||
-                      previousBottomTime!=State.TrailingBottom.time;
-   if(!levelsChanged)
-      return;
-   SMC_DrawUpdateTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
-                                State.TrailingAnchorTime,currentTime,periodSeconds);
-}
+#include <SMC/SMC_IndicatorRuntime.mqh>
 
 int OnInit()
 {
@@ -342,9 +101,9 @@ int OnInit()
       return INIT_PARAMETERS_INCORRECT;
    string legacyObjectPrefix="SC"+
                              IntegerToString((int)(ChartID()%100000))+"_";
-   DeleteObjectsWithPrefix(legacyObjectPrefix);
+   SMC_DeleteObjectsWithPrefix(legacyObjectPrefix);
    ObjectPrefix="SMC"+IntegerToString((long)ChartID())+"_";
-   DeleteSMCObjects(ObjectPrefix);
+   SMC_ClearObjects(ObjectPrefix);
    long tradeHistoryVisible=0;
    TradeHistoryVisibilityCaptured=
       ChartGetInteger(0,CHART_SHOW_TRADE_HISTORY,0,tradeHistoryVisible);
@@ -376,8 +135,8 @@ int OnInit()
    ArraySetAsSeries(CandleClose,true);
    ArraySetAsSeries(CandleColorIndex,true);
    PlotIndexSetInteger(0,PLOT_COLOR_INDEXES,2);
-   PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,BullColor(false));
-   PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,BearColor(false));
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,SMC_COLOR_BULLISH);
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,SMC_COLOR_BEARISH);
    PlotIndexSetDouble(0,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    IndicatorSetString(INDICATOR_SHORTNAME,"Smart Money Concepts");
    return INIT_SUCCEEDED;
@@ -385,7 +144,7 @@ int OnInit()
 
 void OnDeinit(const int reason)
 {
-   DeleteSMCObjects(ObjectPrefix);
+   SMC_ClearObjects(ObjectPrefix);
    if(TradeHistoryVisibilityCaptured && TradeHistoryVisibilityChanged &&
       PreviousTradeHistoryVisibility)
    {
@@ -411,7 +170,7 @@ bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &ope
                        false,SwingLabelSize,true,State,
                        structureEvents,structureEventCount);
    RenderStructureEvents(structureEvents,structureEventCount);
-   SMC_DetectStructure(true,5,1,ratesTotal,time,open,high,low,close,
+   SMC_DetectStructure(true,SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE,1,ratesTotal,time,open,high,low,close,
                        InternalConfluenceFilter,InternalLabelSize,true,State,
                        structureEvents,structureEventCount);
    RenderStructureEvents(structureEvents,structureEventCount);
@@ -419,7 +178,7 @@ bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &ope
       DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,State.EqualHigh,State.EqualLow,
                          1,ratesTotal,time,high,low,State.AtrCache);
    if(ShowSwingPoints)
-      DrawSwingLabels(DrawConfig,time,high,low,1,SwingLength,State.SwingHigh,State.SwingLow);
+      SMC_DrawSwingLabels(DrawConfig,time,high,low,1,SwingLength,State.SwingHigh,State.SwingLow);
 
    SMC_UpdateTrailingLevels(true,time[0],high[0],low[0],
                             State);
@@ -453,23 +212,23 @@ bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &ope
       UpdateFairValueGapsOnTick(time[0],high[0],low[0]);
    int periodSeconds=PeriodSeconds(_Period);
    if(periodSeconds<=0) periodSeconds=60;
-   DrawOrderBlockObjects(DrawConfig,State.OrderBlocks,time[0],periodSeconds);
+   SMC_DrawOrderBlockObjects(DrawConfig,State.OrderBlocks,time[0],periodSeconds);
    datetime structureRight=time[0]+periodSeconds;
    for(int i=0;i<ArraySize(State.LatestStructures);i++)
       if(State.LatestStructures[i].valid)
          State.LatestStructures[i].rightTime=structureRight;
    if(ShowInternalStructure || ShowSwingStructure)
    {
-      ExtendPresentStructures(DrawConfig,State.LatestStructures,
-                              State.PresentStructuresDirty,structureRight);
-      RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
+      SMC_ExtendPresentStructures(DrawConfig,State.LatestStructures,
+                                 State.PresentStructuresDirty,structureRight);
+      SMC_RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
    }
-   RenderPreviousLevels(DrawConfig,ratesTotal,time,high,low);
-   DrawTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
-                      time[0],periodSeconds);
-   DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
-                       State.TrailingAnchorTime,time[0],periodSeconds);
-   UpdateMarketBiasLabel(DrawConfig,State.SwingBias,State.InternalBias);
+   SMC_RenderPreviousLevels(DrawConfig,ratesTotal,time,high,low);
+   SMC_DrawTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
+                          time[0],periodSeconds);
+   SMC_DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
+                           State.TrailingAnchorTime,time[0],periodSeconds);
+   SMC_UpdateMarketBiasLabel(DrawConfig,State.SwingBias,State.InternalBias);
    ChartRedraw(0);
    State.LastProcessedBar=time[0];
    State.LastRatesTotal=ratesTotal;
@@ -508,9 +267,9 @@ void UpdateCurrentBar(const int ratesTotal,const datetime &time[],
          State.LatestStructures[i].rightTime=structureRight;
    if(ShowInternalStructure || ShowSwingStructure)
    {
-      ExtendPresentStructures(DrawConfig,State.LatestStructures,
-                              State.PresentStructuresDirty,structureRight);
-      RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
+      SMC_ExtendPresentStructures(DrawConfig,State.LatestStructures,
+                                 State.PresentStructuresDirty,structureRight);
+      SMC_RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
    }
 }
 
@@ -522,7 +281,7 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
       return false;
    State.LastProcessedBar=time[0];
    State.LastRatesTotal=ratesTotal;
-   DeleteSMCObjects(ObjectPrefix);
+   SMC_ClearObjects(ObjectPrefix);
 
    int count=MathMin(ratesTotal,MaxBarsToProcess);
    for(int i=ratesTotal-1;i>=count;i--)
@@ -575,7 +334,7 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
                              close,false,SwingLabelSize,true,State,
                              structureEvents,structureEventCount);
          RenderStructureEvents(structureEvents,structureEventCount);
-         SMC_DetectStructure(true,5,i,ratesTotal,time,open,high,low,close,
+         SMC_DetectStructure(true,SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE,i,ratesTotal,time,open,high,low,close,
                              InternalConfluenceFilter,InternalLabelSize,true,State,
                              structureEvents,structureEventCount);
          RenderStructureEvents(structureEvents,structureEventCount);
@@ -583,8 +342,8 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
             DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,
                                State.EqualHigh,State.EqualLow,i,ratesTotal,time,high,low,State.AtrCache);
          if(ShowSwingPoints)
-            DrawSwingLabels(DrawConfig,time,high,low,i,SwingLength,
-                            State.SwingHigh,State.SwingLow);
+            SMC_DrawSwingLabels(DrawConfig,time,high,low,i,SwingLength,
+                                State.SwingHigh,State.SwingLow);
          RemoveMitigatedOrderBlocks(high[i],low[i],close[i],time[i]);
       }
       if(ColorCandles)
@@ -602,24 +361,24 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
       if(State.LatestStructures[i].valid)
          State.LatestStructures[i].rightTime=structureRight;
    if(ShowInternalStructure || ShowSwingStructure)
-      RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
-   DrawOrderBlockObjects(DrawConfig,State.OrderBlocks,time[0],periodSeconds);
+      SMC_RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
+   SMC_DrawOrderBlockObjects(DrawConfig,State.OrderBlocks,time[0],periodSeconds);
    if(ShowFairValueGaps)
       DrawFVGs();
    if(ShowDailyLevels)
-      DrawPreviousPeriodLevels(DrawConfig,PERIOD_D1,"D",DailyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
-                               time[0],ratesTotal,time,high,low);
+      SMC_DrawPreviousPeriodLevels(DrawConfig,PERIOD_D1,"D",DailyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
+                                   time[0],ratesTotal,time,high,low);
    if(ShowWeeklyLevels)
-      DrawPreviousPeriodLevels(DrawConfig,PERIOD_W1,"W",WeeklyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
-                               time[0],ratesTotal,time,high,low);
+      SMC_DrawPreviousPeriodLevels(DrawConfig,PERIOD_W1,"W",WeeklyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
+                                   time[0],ratesTotal,time,high,low);
    if(ShowMonthlyLevels)
-      DrawPreviousPeriodLevels(DrawConfig,PERIOD_MN1,"M",MonthlyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
-                               time[0],ratesTotal,time,high,low);
-   DrawTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
-                      time[0],periodSeconds);
-   DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
-                       State.TrailingAnchorTime,time[0],periodSeconds);
-   UpdateMarketBiasLabel(DrawConfig,State.SwingBias,State.InternalBias);
+      SMC_DrawPreviousPeriodLevels(DrawConfig,PERIOD_MN1,"M",MonthlyLevelsStyle,SMC_COLOR_PREVIOUS_LEVEL,
+                                   time[0],ratesTotal,time,high,low);
+   SMC_DrawTrailingLevels(DrawConfig,State.TrailingTop,State.TrailingBottom,State.SwingBias,
+                          time[0],periodSeconds);
+   SMC_DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
+                           State.TrailingAnchorTime,time[0],periodSeconds);
+   SMC_UpdateMarketBiasLabel(DrawConfig,State.SwingBias,State.InternalBias);
    ChartRedraw(0);
    State.LastRatesTotal=ratesTotal;
    return true;

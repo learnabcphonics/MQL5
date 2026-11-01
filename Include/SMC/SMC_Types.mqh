@@ -93,7 +93,6 @@ struct StructureEvent
    string tag;
    bool internal;
    bool bullish;
-   bool liveBar;
    ENUM_SMC_SIZE labelSize;
 };
 
@@ -106,7 +105,6 @@ struct EqualLevelEvent
    datetime labelTime;
    double firstPrice;
    double secondPrice;
-   bool liveBar;
 };
 
 #endif // SMC_TYPES_MQH

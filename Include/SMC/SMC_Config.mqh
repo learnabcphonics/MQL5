@@ -1,0 +1,16 @@
+// Centralized Smart Money Concepts configuration defaults.
+// Palette values stay in SMC_Palette.mqh to keep role boundaries clear.
+#ifndef SMC_CONFIG_MQH
+#define SMC_CONFIG_MQH
+
+#define SMC_DEFAULT_OBJECT_PREFIX "SMC_"
+#define SMC_DEFAULT_SWING_LENGTH 50
+#define SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE 5
+#define SMC_DEFAULT_ORDER_BLOCK_EXTEND 20
+#define SMC_DEFAULT_EQUAL_HIGH_LOW_BARS 3
+#define SMC_DEFAULT_EQUAL_HIGH_LOW_THRESHOLD 0.1
+#define SMC_DEFAULT_MAX_ORDER_BLOCKS_TO_SHOW 3
+#define SMC_DEFAULT_MAX_SWING_ORDER_BLOCKS_TO_SHOW 5
+#define SMC_DEFAULT_MAX_FVG_COUNT 5
+
+#endif // SMC_CONFIG_MQH
