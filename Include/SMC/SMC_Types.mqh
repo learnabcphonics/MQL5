@@ -137,14 +137,28 @@ struct SMC_LiquidityLevel
    bool valid;
    datetime firstTime;
    datetime secondTime;
+   datetime confirmedAt;
    double firstPrice;
    double secondPrice;
+   bool swept;
+   bool invalidated;
+   datetime sweepTime;
 };
 
 struct SMC_LiquidityState
 {
    SMC_LiquidityLevel equalHigh;
    SMC_LiquidityLevel equalLow;
+};
+
+struct SMC_LiquiditySweepEvent
+{
+   bool valid;
+   bool high;
+   datetime time;
+   double poolPrice;
+   double wickExtreme;
+   double close;
 };
 
 #endif // SMC_TYPES_MQH

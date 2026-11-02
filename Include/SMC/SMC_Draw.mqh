@@ -9,6 +9,7 @@
 #include <SMC/SMC_TimeframeSlots.mqh>
 #include <SMC/SMC_DrawStructure.mqh>
 #include <SMC/SMC_DrawEqualLevels.mqh>
+#include <SMC/SMC_DrawLiquiditySweep.mqh>
 #include <SMC/SMC_DrawOrderBlocks.mqh>
 #include <SMC/SMC_DrawMTFOrderBlocks.mqh>
 #include <SMC/SMC_DrawFVG.mqh>

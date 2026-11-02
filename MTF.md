@@ -87,9 +87,9 @@ nghị giao dịch.
 - Slot trùng nhau chỉ được tính/vẽ một lần; timeframe trùng chart không tạo
   thêm hàng. Khi phép tính cho nến đóng mới thất bại, bias cache cũ không được
   tiếp tục trình bày như dữ liệu mới.
-- Phần BOS/CHoCH và OB/FVG MTF hiện tính riêng theo timeframe so sánh; EQH/EQL,
-  liquidity state hiện chỉ chạy trong state chart. Phát hiện/vẽ EQH/EQL MTF,
-  sweep, trigger liquidity và liên kết setup-trigger chưa triển khai.
+- Phần BOS/CHoCH và OB/FVG MTF hiện tính riêng theo timeframe so sánh; EQH/EQL
+  và Liquidity Sweep hiện chỉ chạy trong state chart. EQH/EQL MTF, sweep MTF,
+  trigger cấu trúc LTF và liên kết setup-trigger chưa triển khai.
 - Module tính và module vẽ Bias đã được tách riêng. Giai đoạn 1 compile thành
   công với 0 lỗi và 0 cảnh báo; giai đoạn 2 cũng compile thành công với 0 lỗi
   và 0 cảnh báo. Cần kiểm tra trực quan trên chart; MTF chưa có bộ test tự động
@@ -241,13 +241,23 @@ Mục tiêu: nhận biết sự kiện trigger mà không biến nó thành lệ
 
 Nền tảng phân tách đã có: EQH/EQL được phát hiện trong
 `SMC_EqualLevels.mqh`, các mức gần nhất được lưu qua `SMC_Liquidity.mqh`, còn
-vẽ EQH/EQL thuộc `SMC_DrawEqualLevels.mqh`. Chưa có quy tắc phát hiện sweep;
-cần chốt định nghĩa trước khi triển khai logic đó.
+vẽ EQH/EQL thuộc `SMC_DrawEqualLevels.mqh`. Logic sweep ban đầu chạy trên
+timeframe chart; EQH/EQL MTF và sweep MTF chưa triển khai.
 
-1. Xác định/hiển thị liquidity levels và sweep trên timeframe được cấu hình.
-2. Tính BOS/CHoCH hoặc trigger cấu trúc LTF độc lập.
-3. Phân biệt sự kiện đang hình thành với sự kiện đã xác nhận bằng nến đóng.
-4. Liên kết trigger với bối cảnh/vùng ở timeframe khác chỉ để trình bày quan hệ;
+1. Chỉ dùng EQH/EQL đã xác nhận làm pool; một pool phía trên (EQH/BSL) lấy
+   cạnh ngoài cao hơn của hai pivot, pool phía dưới (EQL/SSL) lấy cạnh ngoài
+   thấp hơn. Theo detector hiện tại, chỉ giữ pool mới nhất mỗi loại.
+2. Chỉ xét nến đóng xảy ra sau thời điểm pool được xác nhận. EQH bị sweep khi
+   high vượt pool và close quay xuống dưới pool; EQL bị sweep khi low xuyên
+   pool và close quay lên trên pool. Buffer bằng 0.
+3. Mỗi pool chỉ tạo một sweep. Nếu close đóng hẳn ngoài pool mà không reclaim,
+   pool bị invalidated và không phát sweep. Không kết luận đảo chiều hay lệnh.
+4. Vẽ nhãn BSL/SSL Sweep có timeframe và cho phép tắt hiển thị bằng input
+   `ShowLiquiditySweeps`; logic trạng thái vẫn được cập nhật.
+5. Mở rộng EQH/EQL và sweep sang các timeframe MTF được cấu hình.
+6. Tính BOS/CHoCH hoặc trigger cấu trúc LTF độc lập.
+7. Phân biệt sự kiện đang hình thành với sự kiện đã xác nhận bằng nến đóng.
+8. Liên kết trigger với bối cảnh/vùng ở timeframe khác chỉ để trình bày quan hệ;
    chưa kết luận giao dịch nếu chưa có rule.
 
 **Kết quả chấp nhận:** người dùng thấy trigger xảy ra ở timeframe nào, tại vùng

@@ -81,6 +81,9 @@ input int EqualHighLowConfirmationBars = SMC_DEFAULT_EQUAL_HIGH_LOW_BARS;
 input double EqualHighLowThreshold = SMC_DEFAULT_EQUAL_HIGH_LOW_THRESHOLD;
 input ENUM_SMC_SIZE EqualHighLowLabelSize = SMC_TINY;
 
+input group "Liquidity Sweep"
+input bool ShowLiquiditySweeps = true;
+
 input group "Fair Value Gaps"
 input bool ShowFairValueGaps = false;
 input bool FairValueGapAutoThreshold = false;
@@ -276,7 +279,7 @@ bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &ope
    RenderStructureEvents(structureEvents,structureEventCount);
    DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,
                       State.EqualHigh,State.EqualLow,1,ratesTotal,time,high,
-                      low,State.AtrCache);
+                      low,close,State.AtrCache);
    if(ShowSwingPoints)
       SMC_DrawSwingLabels(DrawConfig,time,high,low,1,SwingLength,State.SwingHigh,State.SwingLow);
 
@@ -430,7 +433,7 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
          RenderStructureEvents(structureEvents,structureEventCount);
          DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,
                             State.EqualHigh,State.EqualLow,i,ratesTotal,time,
-                            high,low,State.AtrCache);
+                            high,low,close,State.AtrCache);
          if(ShowSwingPoints)
             SMC_DrawSwingLabels(DrawConfig,time,high,low,i,SwingLength,
                                 State.SwingHigh,State.SwingLow);

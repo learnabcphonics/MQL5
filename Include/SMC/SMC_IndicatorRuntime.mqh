@@ -101,12 +101,24 @@ void RenderStructureEvents(const StructureEvent &events[],const int eventCount)
 void DetectEqualHighLow(const int size,int &legState,
                         PivotState &equalHigh,PivotState &equalLow,
                         const int i,const int ratesTotal,const datetime &time[],
-                        const double &high[],const double &low[],const double &atr[])
+                        const double &high[],const double &low[],
+                        const double &close[],const double &atr[])
 {
+   SMC_LiquiditySweepEvent highSweep,lowSweep;
+   SMC_DetectLiquiditySweeps(time[i],high[i],low[i],close[i],
+                             State.Liquidity,highSweep,lowSweep);
+   if(ShowLiquiditySweeps)
+   {
+      if(highSweep.valid)
+         SMC_DrawLiquiditySweep(DrawConfig,highSweep);
+      if(lowSweep.valid)
+         SMC_DrawLiquiditySweep(DrawConfig,lowSweep);
+   }
+
    EqualLevelEvent event;
    SMC_DetectEqualHighLow(size,legState,equalHigh,equalLow,i,ratesTotal,time,
                           high,low,atr,EqualHighLowThreshold,event);
-   SMC_UpdateLiquidityFromEqualLevel(event,State.Liquidity);
+   SMC_UpdateLiquidityFromEqualLevel(event,time[i],State.Liquidity);
    if(!event.valid)
       return;
    if(ShowEqualHighsLows)
