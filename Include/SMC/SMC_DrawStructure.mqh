@@ -5,68 +5,6 @@
 
 #include <SMC/SMC_DrawHelpers.mqh>
 
-void SMC_UpdateMarketBiasLabel(const SMC_DrawConfig &config,const int swingBias,
-                               const int internalBias,
-                               const bool showHigherTimeframeBias,
-                               const SMC_HigherBiasState &higherBiasStates[])
-{
-   string name=config.objectPrefix+"BIAS";
-   if(!config.showMarketBias)
-   {
-      SMC_PineDrawingDelete(name);
-      for(int i=0;i<ArraySize(higherBiasStates);i++)
-         SMC_PineDrawingDelete(config.objectPrefix+"BIAS_"+
-                               SMC_TimeframeLabel(higherBiasStates[i].timeframe));
-      return;
-   }
-   color biasColor=swingBias>0 ? SMC_COLOR_BULLISH :
-                   (swingBias<0 ? SMC_COLOR_BEARISH :
-                                  SMC_COLOR_EQUILIBRIUM);
-   SMC_PineScreenLabelSet(name,
-      "SMC ["+SMC_TimeframeLabel(config.chartTimeframe)+
-      "] Bias | Swing: "+SMC_BiasText(swingBias)+
-      " | Internal: "+SMC_BiasText(internalBias),
-      biasColor,CORNER_LEFT_UPPER,10,40,10,true);
-   if(!showHigherTimeframeBias)
-   {
-      for(int i=0;i<ArraySize(higherBiasStates);i++)
-         SMC_PineDrawingDelete(config.objectPrefix+"BIAS_"+
-                               SMC_TimeframeLabel(higherBiasStates[i].timeframe));
-      return;
-   }
-   int higherBiasRow=0;
-   for(int i=0;i<ArraySize(higherBiasStates);i++)
-   {
-      string timeframeLabel=SMC_TimeframeLabel(higherBiasStates[i].timeframe);
-      string higherBiasName=config.objectPrefix+"BIAS_"+timeframeLabel;
-      if(higherBiasStates[i].timeframe==config.chartTimeframe)
-      {
-         SMC_PineDrawingDelete(higherBiasName);
-         continue;
-      }
-      string higherText;
-      color higherColor=SMC_COLOR_EQUILIBRIUM;
-      if(higherBiasStates[i].valid)
-      {
-         higherText="SMC ["+timeframeLabel+
-                    "] Bias | Swing: "+
-                    SMC_BiasText(higherBiasStates[i].swingBias)+
-                    " | Internal: "+
-                    SMC_BiasText(higherBiasStates[i].internalBias);
-         higherColor=higherBiasStates[i].swingBias>0 ? SMC_COLOR_BULLISH :
-                     (higherBiasStates[i].swingBias<0 ? SMC_COLOR_BEARISH :
-                                                      SMC_COLOR_EQUILIBRIUM);
-      }
-      else
-         higherText="SMC ["+timeframeLabel+
-                    "] Bias | Loading closed-bar history";
-      SMC_PineScreenLabelSet(higherBiasName,
-                             higherText,higherColor,CORNER_LEFT_UPPER,
-                             10,60+higherBiasRow*20,10,true);
-      higherBiasRow++;
-   }
-}
-
 void SMC_DrawHorizontalStructure(const SMC_DrawConfig &config,
                              StructureDisplayState &latestStructures[],
                              bool &presentStructuresDirty,const string id,

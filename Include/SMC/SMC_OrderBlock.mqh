@@ -46,6 +46,29 @@ void SMC_StoreOrderBlock(const PivotState &pivot,const bool internal,const int b
    orderBlocks[count]=block;
 }
 
+void SMC_StoreOrderBlocksFromStructureEvents(
+                                    const StructureEvent &events[],
+                                    const int eventCount,
+                                    const datetime &time[],
+                                    const double &parsedHighs[],
+                                    const double &parsedLows[],
+                                    const int ratesTotal,
+                                    const int currentIndex,
+                                    const bool enabled,
+                                    OrderBlockState &orderBlocks[])
+{
+   if(!enabled)
+      return;
+   int count=MathMin(eventCount,ArraySize(events));
+   for(int i=0;i<count;i++)
+   {
+      int bias=(events[i].bullish ? 1 : -1);
+      SMC_StoreOrderBlock(events[i].pivot,events[i].internal,bias,time,
+                          parsedHighs,parsedLows,ratesTotal,currentIndex,true,
+                          orderBlocks);
+   }
+}
+
 bool SMC_RemoveMitigatedOrderBlocks(const double high,const double low,
                                     const double close,const datetime barTime,
                                     const ENUM_SMC_MITIGATION mitigation,

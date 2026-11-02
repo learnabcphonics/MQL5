@@ -11,7 +11,9 @@
 #include <SMC/SMC_Structure.mqh>
 #include <SMC/SMC_FVG.mqh>
 #include <SMC/SMC_EqualLevels.mqh>
+#include <SMC/SMC_Liquidity.mqh>
 #include <SMC/SMC_Calculation.mqh>
+#include <SMC/SMC_TimeframeAnalysis.mqh>
 #property indicator_buffers 5
 #property indicator_plots   1
 #property indicator_type1   DRAW_COLOR_CANDLES
@@ -28,6 +30,19 @@ input bool HideTradeHistoryMarkers = true;
 input group "Market Bias"
 input bool ShowMarketBias = true;
 input bool ShowHigherTimeframeBias = true;
+
+input group "Multi-Timeframe Bias"
+input bool EnableBiasTimeframe1 = true;
+input ENUM_TIMEFRAMES BiasTimeframe1 = PERIOD_H4;
+input bool EnableBiasTimeframe2 = true;
+input ENUM_TIMEFRAMES BiasTimeframe2 = PERIOD_D1;
+input bool EnableBiasTimeframe3 = true;
+input ENUM_TIMEFRAMES BiasTimeframe3 = PERIOD_W1;
+
+input group "MTF Structure & Setup"
+input bool ShowMTFStructureEvents = true;
+input bool ShowMTFOrderBlocks = false;
+input bool ShowMTFFairValueGaps = false;
 
 input group "Real Time Internal Structure"
 input bool ShowInternalStructure = true;
@@ -94,9 +109,11 @@ bool PreviousMouseMoveEvents = false;
 bool MouseMoveEventsCaptured = false;
 bool MouseMoveEventsChanged = false;
 ENUM_TIMEFRAMES LastChartPeriod = PERIOD_CURRENT;
-SMC_HigherBiasState HigherBiasStates[3];
+SMC_TimeframeBiasState TimeframeBiasStates[3];
 
 #include <SMC/SMC_Draw.mqh>
+#include <SMC/SMC_IndicatorFVG.mqh>
+#include <SMC/SMC_IndicatorMTF.mqh>
 #include <SMC/SMC_IndicatorRuntime.mqh>
 
 int OnInit()
@@ -106,14 +123,31 @@ int OnInit()
       InternalOrderBlocksToShow<1 || InternalOrderBlocksToShow>20 ||
       SwingOrderBlocksToShow<1 || SwingOrderBlocksToShow>20 ||
       OrderBlockExtend<1 || OrderBlockExtend>1000 ||
-      (ShowFairValueGaps &&
+      ((ShowFairValueGaps || ShowMTFFairValueGaps) &&
        (FairValueGapExtend<0 || MaxFairValueGapsToShow<1 ||
         MaxFairValueGapsToShow>100)) || EqualHighLowThreshold<0.0 ||
       EqualHighLowThreshold>0.5)
       return INIT_PARAMETERS_INCORRECT;
-   HigherBiasStates[0].timeframe=PERIOD_H4;
-   HigherBiasStates[1].timeframe=PERIOD_D1;
-   HigherBiasStates[2].timeframe=PERIOD_W1;
+   TimeframeBiasStates[0].enabled=EnableBiasTimeframe1;
+   TimeframeBiasStates[0].timeframe=
+      (BiasTimeframe1==PERIOD_CURRENT ? _Period : BiasTimeframe1);
+   TimeframeBiasStates[1].enabled=EnableBiasTimeframe2;
+   TimeframeBiasStates[1].timeframe=
+      (BiasTimeframe2==PERIOD_CURRENT ? _Period : BiasTimeframe2);
+   TimeframeBiasStates[2].enabled=EnableBiasTimeframe3;
+   TimeframeBiasStates[2].timeframe=
+      (BiasTimeframe3==PERIOD_CURRENT ? _Period : BiasTimeframe3);
+   for(int i=0;i<ArraySize(TimeframeBiasStates);i++)
+   {
+      if(TimeframeBiasStates[i].enabled &&
+         (PeriodSeconds(TimeframeBiasStates[i].timeframe)<=0 ||
+          TimeframeBiasStates[i].timeframe==PERIOD_CURRENT))
+      {
+         PrintFormat("SMC: invalid MTF bias timeframe in slot %d (%s).",
+                     i+1,EnumToString(TimeframeBiasStates[i].timeframe));
+         return INIT_PARAMETERS_INCORRECT;
+      }
+   }
    string legacyObjectPrefix="SC"+
                              IntegerToString((int)(ChartID()%100000))+"_";
    SMC_DeleteObjectsWithPrefix(legacyObjectPrefix);
@@ -227,16 +261,22 @@ bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &ope
    StructureEvent structureEvents[2];
    int structureEventCount=0;
    SMC_DetectStructure(false,SwingLength,1,ratesTotal,time,open,high,low,close,
-                       false,SwingLabelSize,true,State,
+                       false,SwingLabelSize,State,
                        structureEvents,structureEventCount);
+   SMC_StoreOrderBlocksFromStructureEvents(
+      structureEvents,structureEventCount,time,State.ParsedHighs,
+      State.ParsedLows,ratesTotal,1,true,State.OrderBlocks);
    RenderStructureEvents(structureEvents,structureEventCount);
    SMC_DetectStructure(true,SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE,1,ratesTotal,time,open,high,low,close,
-                       InternalConfluenceFilter,InternalLabelSize,true,State,
+                       InternalConfluenceFilter,InternalLabelSize,State,
                        structureEvents,structureEventCount);
+   SMC_StoreOrderBlocksFromStructureEvents(
+      structureEvents,structureEventCount,time,State.ParsedHighs,
+      State.ParsedLows,ratesTotal,1,true,State.OrderBlocks);
    RenderStructureEvents(structureEvents,structureEventCount);
-   if(ShowEqualHighsLows)
-      DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,State.EqualHigh,State.EqualLow,
-                         1,ratesTotal,time,high,low,State.AtrCache);
+   DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,
+                      State.EqualHigh,State.EqualLow,1,ratesTotal,time,high,
+                      low,State.AtrCache);
    if(ShowSwingPoints)
       SMC_DrawSwingLabels(DrawConfig,time,high,low,1,SwingLength,State.SwingHigh,State.SwingLow);
 
@@ -280,7 +320,7 @@ bool ProcessNewBar(const int ratesTotal,const datetime &time[],const double &ope
                           time[0],periodSeconds);
    SMC_DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
                            State.TrailingAnchorTime,time[0],periodSeconds);
-   SMC_UpdateMarketBiasPanel();
+   SMC_UpdateTimeframeAnalysis();
    ChartRedraw(0);
    State.LastProcessedBar=time[0];
    State.LastRatesTotal=ratesTotal;
@@ -314,6 +354,7 @@ void UpdateCurrentBar(const int ratesTotal,const datetime &time[],
       UpdateFairValueGapsOnTick(time[0],high[0],low[0]);
    if(ShowInternalStructure || ShowSwingStructure)
       SMC_RenderPresentStructures(DrawConfig,State.LatestStructures,State.PresentStructuresDirty);
+   SMC_UpdateTimeframeAnalysis();
 }
 
 bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
@@ -374,16 +415,22 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
          StructureEvent structureEvents[2];
          int structureEventCount=0;
          SMC_DetectStructure(false,SwingLength,i,ratesTotal,time,open,high,low,
-                             close,false,SwingLabelSize,true,State,
+                             close,false,SwingLabelSize,State,
                              structureEvents,structureEventCount);
+         SMC_StoreOrderBlocksFromStructureEvents(
+            structureEvents,structureEventCount,time,State.ParsedHighs,
+            State.ParsedLows,ratesTotal,i,true,State.OrderBlocks);
          RenderStructureEvents(structureEvents,structureEventCount);
          SMC_DetectStructure(true,SMC_DEFAULT_INTERNAL_STRUCTURE_SIZE,i,ratesTotal,time,open,high,low,close,
-                             InternalConfluenceFilter,InternalLabelSize,true,State,
+                             InternalConfluenceFilter,InternalLabelSize,State,
                              structureEvents,structureEventCount);
+         SMC_StoreOrderBlocksFromStructureEvents(
+            structureEvents,structureEventCount,time,State.ParsedHighs,
+            State.ParsedLows,ratesTotal,i,true,State.OrderBlocks);
          RenderStructureEvents(structureEvents,structureEventCount);
-         if(ShowEqualHighsLows)
-            DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,
-                               State.EqualHigh,State.EqualLow,i,ratesTotal,time,high,low,State.AtrCache);
+         DetectEqualHighLow(EqualHighLowConfirmationBars,State.EqualLeg,
+                            State.EqualHigh,State.EqualLow,i,ratesTotal,time,
+                            high,low,State.AtrCache);
          if(ShowSwingPoints)
             SMC_DrawSwingLabels(DrawConfig,time,high,low,i,SwingLength,
                                 State.SwingHigh,State.SwingLow);
@@ -409,7 +456,7 @@ bool RebuildHistoricalState(const int ratesTotal,const datetime &time[],
                           time[0],periodSeconds);
    SMC_DrawPremiumDiscount(DrawConfig,State.TrailingTop,State.TrailingBottom,
                            State.TrailingAnchorTime,time[0],periodSeconds);
-   SMC_UpdateMarketBiasPanel();
+   SMC_UpdateTimeframeAnalysis(true);
    ChartRedraw(0);
    State.LastRatesTotal=ratesTotal;
    return true;

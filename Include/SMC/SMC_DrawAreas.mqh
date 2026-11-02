@@ -4,6 +4,7 @@
 #define SMC_DRAWAREAS_MQH
 
 #include <SMC/SMC_DrawHelpers.mqh>
+#include <SMC/SMC_DrawZoneHelpers.mqh>
 
 void SMC_DrawZoneBox(const string name,const datetime startTime,
                      const datetime endTime,const double top,

@@ -1,72 +1,11 @@
 // Derived from Smart Money Concepts
 // Any redistribution must retain attribution and this license notice.
-#ifndef SMC_DRAWZONES_MQH
-#define SMC_DRAWZONES_MQH
+#ifndef SMC_DRAWORDERBLOCKS_MQH
+#define SMC_DRAWORDERBLOCKS_MQH
 
 #include <SMC/SMC_DrawHelpers.mqh>
 #include <SMC/SMC_DrawAreas.mqh>
-
-void SMC_DrawFairValueGap(const SMC_DrawConfig &config,const FairValueGapState &gap,
-                      const color zoneColor)
-{
-   string id=(gap.bias>0 ? "Bull_" : "Bear_")+
-             IntegerToString((int)gap.time);
-   string zoneName=config.objectPrefix+"FVG_"+id;
-   string firstName=zoneName+"_1";
-   string secondName=zoneName+"_2";
-   bool hasOverlap=false;
-   for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
-   {
-      string name=ObjectName(0,i,-1,-1);
-      if(StringFind(name,config.objectPrefix+"OB_")==0 &&
-         ObjectFind(0,name)>=0 &&
-         ObjectGetInteger(0,name,OBJPROP_TYPE)==(int)OBJ_RECTANGLE)
-      {
-         datetime obLeft=(datetime)ObjectGetInteger(0,name,OBJPROP_TIME,0);
-         datetime obRight=(datetime)ObjectGetInteger(0,name,OBJPROP_TIME,1);
-         double obTop=ObjectGetDouble(0,name,OBJPROP_PRICE,0);
-         double obBottom=ObjectGetDouble(0,name,OBJPROP_PRICE,1);
-         if(SMC_ZoneRectanglesOverlap(gap.left,gap.right,
-                                     gap.top,gap.bottom,
-                                     obLeft,obRight,obTop,obBottom))
-         {
-            hasOverlap=true;
-            break;
-         }
-      }
-   }
-   if(hasOverlap)
-   {
-      SMC_PineDrawingDelete(zoneName);
-      SMC_PineDrawingDelete(firstName);
-      SMC_PineDrawingDelete(secondName);
-      SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_Label");
-      return;
-   }
-   SMC_PineDrawingDelete(firstName);
-   SMC_PineDrawingDelete(secondName);
-   SMC_DrawZoneBox(zoneName,gap.left,gap.right,
-                   gap.top,gap.bottom,zoneColor,70,70,false);
-   datetime middleTime=gap.left+(gap.right-gap.left)/2;
-   double middlePrice=(gap.top+gap.bottom)*0.5;
-   double labelPrice=SMC_LabelOffsetPrice(config.objectPrefix+"FVG_"+id,
-                                         middlePrice,MathAbs(gap.top-gap.bottom));
-   string label=SMC_TimeframeLabel(config.chartTimeframe)+" "+
-                (gap.bias>0 ? "Bullish FVG" : "Bearish FVG");
-   SMC_DrawText(config.objectPrefix+"FVG_"+id+"_Label",middleTime,labelPrice,
-            label,SMC_COLOR_LABEL,ANCHOR_CENTER);
-}
-
-void SMC_DeleteFairValueGap(const SMC_DrawConfig &config,
-                        const FairValueGapState &gap)
-{
-   string id=(gap.bias>0 ? "Bull_" : "Bear_")+
-             IntegerToString((int)gap.time);
-   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id);
-   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_1");
-   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_2");
-   SMC_PineDrawingDelete(config.objectPrefix+"FVG_"+id+"_Label");
-}
+#include <SMC/SMC_DrawZoneHelpers.mqh>
 
 string SMC_OrderBlockObjectName(const SMC_DrawConfig &config,
                                 const OrderBlockState &block)
@@ -117,7 +56,8 @@ bool SMC_FindOrderBlockLabelPosition(const datetime baseTime,
       {
          bool overlapsHorizontally=
             MathAbs(baseX-occupiedX[i])<labelHalfWidth+occupiedHalfWidths[i];
-         bool overlapsVertically=MathAbs(candidateY-occupiedY[i])<labelHalfHeight*2;
+         bool overlapsVertically=
+            MathAbs(candidateY-occupiedY[i])<labelHalfHeight*2;
          if(overlapsHorizontally && overlapsVertically)
          {
             overlaps=true;
@@ -138,8 +78,8 @@ bool SMC_FindOrderBlockLabelPosition(const datetime baseTime,
 }
 
 void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
-                           const OrderBlockState &orderBlocks[],
-                           const datetime lastTime,const int periodSeconds)
+                               const OrderBlockState &orderBlocks[],
+                               const datetime lastTime,const int periodSeconds)
 {
    int totalInternal=0,totalSwing=0;
    int labelX[40],labelY[40],labelHalfWidths[40];
@@ -159,16 +99,21 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
    datetime blockRight[];
    if(ArrayResize(blockRight,count)!=count)
       return;
-   int safePeriodSecondsForCache=MathMax(1,periodSeconds);
-   int extendBarsForCache=MathMax(1,config.orderBlockExtend);
-   long extensionSecondsForCache=(long)safePeriodSecondsForCache*extendBarsForCache;
+   int safePeriodSeconds=MathMax(1,periodSeconds);
+   int extendBars=MathMax(1,config.orderBlockExtend);
+   long extensionSeconds=(long)safePeriodSeconds*extendBars;
    string keepNames[];
-   ArrayResize(keepNames,0);
+   if(ArrayResize(keepNames,0)!=0)
+   {
+      PrintFormat("SMC: unable to initialize order block draw list (error=%d).",
+                  GetLastError());
+      return;
+   }
    for(int i=0;i<count;i++)
    {
-      blockRight[i]=(datetime)((long)lastTime+extensionSecondsForCache);
+      blockRight[i]=(datetime)((long)lastTime+extensionSeconds);
       if(blockRight[i]<=orderBlocks[i].time)
-         blockRight[i]=orderBlocks[i].time+safePeriodSecondsForCache;
+         blockRight[i]=orderBlocks[i].time+safePeriodSeconds;
    }
    for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
    {
@@ -176,7 +121,7 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
       if(StringFind(existingName,config.objectPrefix+"OB_")==0)
          SMC_PineDrawingDelete(existingName);
    }
-   // Draw swing zones first so internal child zones remain visible on top.
+
    for(int drawPass=0;drawPass<2;drawPass++)
    {
       bool drawInternal=(drawPass==1);
@@ -210,12 +155,16 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
          if(ObjectFind(0,objectName)<0)
             continue;
          ObjectDelete(0,objectName+"_Origin");
-         ArrayResize(keepNames,ArraySize(keepNames)+1);
-         keepNames[ArraySize(keepNames)-1]=objectName;
-         ArrayResize(keepNames,ArraySize(keepNames)+1);
-         keepNames[ArraySize(keepNames)-1]=objectName+"_Label";
-         ArrayResize(keepNames,ArraySize(keepNames)+1);
-         keepNames[ArraySize(keepNames)-1]=objectName+"_Origin";
+         int keepCount=ArraySize(keepNames);
+         if(ArrayResize(keepNames,keepCount+3)!=keepCount+3)
+         {
+            PrintFormat("SMC: unable to retain order block draw objects (error=%d).",
+                        GetLastError());
+            continue;
+         }
+         keepNames[keepCount]=objectName;
+         keepNames[keepCount+1]=objectName+"_Label";
+         keepNames[keepCount+2]=objectName+"_Origin";
          datetime labelTime=block.time+(rightTime-block.time)/2;
          string label=SMC_TimeframeLabel(config.chartTimeframe)+" "+
                       (block.internal ? "Int " : "Swing ")+
@@ -238,8 +187,8 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
             labelHalfWidths[placedLabelCount]=halfWidth;
             placedLabelCount++;
          }
-         SMC_DrawText(objectName+"_Label",adjustedTime,adjustedPrice,
-                  label,SMC_COLOR_LABEL,ANCHOR_CENTER,8,true);
+         SMC_DrawText(objectName+"_Label",adjustedTime,adjustedPrice,label,
+                      SMC_COLOR_LABEL,ANCHOR_CENTER,8,true);
       }
    }
    for(int i=ObjectsTotal(0,-1,-1)-1;i>=0;--i)
@@ -262,4 +211,4 @@ void SMC_DrawOrderBlockObjects(const SMC_DrawConfig &config,
    }
 }
 
-#endif // SMC_DRAWZONES_MQH
+#endif // SMC_DRAWORDERBLOCKS_MQH

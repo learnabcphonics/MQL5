@@ -67,16 +67,6 @@ struct StructureDisplayState
    bool valid;
 };
 
-struct SMC_HigherBiasState
-{
-   ENUM_TIMEFRAMES timeframe;
-   datetime lastClosedBar;
-   datetime lastAttemptChartBar;
-   int swingBias;
-   int internalBias;
-   bool valid;
-};
-
 struct OrderBlockState
 {
    double high;
@@ -101,6 +91,26 @@ struct FairValueGapState
    double secondBottom;
 };
 
+struct SMC_TimeframeBiasState
+{
+   ENUM_TIMEFRAMES timeframe;
+   bool enabled;
+   datetime lastClosedBar;
+   datetime lastAttemptClosedBar;
+   datetime lastAttemptChartBar;
+   int swingBias;
+   int internalBias;
+   datetime swingStructureTime;
+   int swingStructureBias;
+   string swingStructureTag;
+   datetime internalStructureTime;
+   int internalStructureBias;
+   string internalStructureTag;
+   OrderBlockState orderBlocks[];
+   FairValueGapState fairValueGaps[];
+   bool valid;
+};
+
 struct StructureEvent
 {
    PivotState pivot;
@@ -120,6 +130,21 @@ struct EqualLevelEvent
    datetime labelTime;
    double firstPrice;
    double secondPrice;
+};
+
+struct SMC_LiquidityLevel
+{
+   bool valid;
+   datetime firstTime;
+   datetime secondTime;
+   double firstPrice;
+   double secondPrice;
+};
+
+struct SMC_LiquidityState
+{
+   SMC_LiquidityLevel equalHigh;
+   SMC_LiquidityLevel equalLow;
 };
 
 #endif // SMC_TYPES_MQH

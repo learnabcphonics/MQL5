@@ -1,7 +1,7 @@
 // Derived from Smart Money Concepts
 // Any redistribution must retain attribution and this license notice.
-#ifndef SMC_DRAWLIQUIDITY_MQH
-#define SMC_DRAWLIQUIDITY_MQH
+#ifndef SMC_DRAWEQUALLEVELS_MQH
+#define SMC_DRAWEQUALLEVELS_MQH
 
 #include <SMC/SMC_DrawHelpers.mqh>
 
@@ -26,4 +26,4 @@ void SMC_DrawEqualLevelEvent(const SMC_DrawConfig &config,
                 (int)labelSize);
 }
 
-#endif // SMC_DRAWLIQUIDITY_MQH
+#endif // SMC_DRAWEQUALLEVELS_MQH

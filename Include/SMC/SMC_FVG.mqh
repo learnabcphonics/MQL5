@@ -70,7 +70,8 @@ bool SMC_UpdateFVGThreshold(const MqlRates &bars[],const double point,
 
 bool SMC_AnalyzeHistoricalFVG(const MqlRates &bars[],const bool autoThreshold,
                               const int extend,const int periodSeconds,
-                              const double point,SMC_State &state)
+                              const double point,SMC_State &state,
+                              const bool latestBarClosed=false)
 {
    int copied=ArraySize(bars);
    if(copied<3)
@@ -111,7 +112,7 @@ bool SMC_AnalyzeHistoricalFVG(const MqlRates &bars[],const bool autoThreshold,
       bool bearish=(bars[i].high<bars[i+2].low &&
                     bars[i+1].close<bars[i+2].low &&
                     (!autoThreshold || -signedChange>thresholds[i]));
-      if(i==0)
+      if(i==0 && !latestBarClosed)
       {
          bullish=false;
          bearish=false;

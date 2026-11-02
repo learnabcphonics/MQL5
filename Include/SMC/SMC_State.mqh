@@ -32,6 +32,7 @@ struct SMC_State
    int SwingLeg;
    int InternalLeg;
    int EqualLeg;
+   SMC_LiquidityState Liquidity;
 
    OrderBlockState OrderBlocks[];
    FairValueGapState FairValueGaps[];
@@ -75,6 +76,7 @@ bool SMC_ResetState(SMC_State &state)
    state.SwingLeg=0;
    state.InternalLeg=0;
    state.EqualLeg=0;
+   ZeroMemory(state.Liquidity);
    state.CurrentFVGThreshold=0.0;
    state.CumulativeRangeClosedSum=0.0;
    state.LastProcessedBar=0;

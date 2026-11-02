@@ -4,7 +4,6 @@
 #define SMC_STRUCTURE_MQH
 
 #include <SMC/SMC_State.mqh>
-#include <SMC/SMC_OrderBlock.mqh>
 
 void SMC_UpdatePivot(PivotState &pivot,const double level,const datetime pivotTime,
                      const int pivotIndex)
@@ -28,9 +27,6 @@ void SMC_DetectStructureCore(const bool internal,const int legSize,int &legState
                          const PivotState &swingHigh,const PivotState &swingLow,
                          PivotState &trailingTop,PivotState &trailingBottom,
                          datetime &trailingAnchorTime,
-                         const double &parsedHighs[],const double &parsedLows[],
-                         const bool storeOrderBlocks,
-                         OrderBlockState &orderBlocks[],
                          StructureEvent &events[],int &eventCount)
 {
    eventCount=0;
@@ -97,8 +93,6 @@ void SMC_DetectStructureCore(const bool internal,const int legSize,int &legState
       eventCount++;
       pivotHigh.crossed=true;
       trendBias=1;
-      SMC_StoreOrderBlock(pivotHigh,internal,1,time,parsedHighs,parsedLows,
-                          ratesTotal,i,storeOrderBlocks,orderBlocks);
    }
    if(bearish && !pivotLow.crossed && bearishConfluence &&
       (!internal || !swingLow.initialized ||
@@ -113,8 +107,6 @@ void SMC_DetectStructureCore(const bool internal,const int legSize,int &legState
       eventCount++;
       pivotLow.crossed=true;
       trendBias=-1;
-      SMC_StoreOrderBlock(pivotLow,internal,-1,time,parsedHighs,parsedLows,
-                          ratesTotal,i,storeOrderBlocks,orderBlocks);
    }
 }
 
@@ -123,8 +115,7 @@ void SMC_DetectStructure(const bool internal,const int legSize,
                          const datetime &time[],const double &open[],
                          const double &high[],const double &low[],
                          const double &close[],const bool confluenceFilter,
-                         const ENUM_SMC_SIZE labelSize,
-                         const bool storeOrderBlocks,SMC_State &state,
+                         const ENUM_SMC_SIZE labelSize,SMC_State &state,
                          StructureEvent &events[],int &eventCount)
 {
    if(internal)
@@ -135,9 +126,7 @@ void SMC_DetectStructure(const bool internal,const int legSize,
                               close,confluenceFilter,labelSize,state.SwingHigh,
                               state.SwingLow,state.TrailingTop,
                               state.TrailingBottom,state.TrailingAnchorTime,
-                              state.ParsedHighs,state.ParsedLows,
-                              storeOrderBlocks,state.OrderBlocks,events,
-                              eventCount);
+                              events,eventCount);
       return;
    }
 
@@ -146,8 +135,7 @@ void SMC_DetectStructure(const bool internal,const int legSize,
                            open,high,low,close,confluenceFilter,labelSize,
                            state.SwingHigh,state.SwingLow,state.TrailingTop,
                            state.TrailingBottom,state.TrailingAnchorTime,
-                           state.ParsedHighs,state.ParsedLows,
-                           storeOrderBlocks,state.OrderBlocks,events,eventCount);
+                           events,eventCount);
 }
 
 #endif // SMC_STRUCTURE_MQH
